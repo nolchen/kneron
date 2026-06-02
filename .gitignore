@@ -1,0 +1,25 @@
+# Dependencies
+backend/.venv/
+frontend/node_modules/
+frontend/.next/
+
+# Env (contains API keys)
+backend/.env
+
+# Hermes Agent — large cloned repo, reference only
+hermes-agent/
+
+# macOS
+.DS_Store
+*\ 2.*
+*\ 2/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Local vector DB
+backend/notes_db/
+
+# Obsidian settings
+PM-Vault/.obsidian/

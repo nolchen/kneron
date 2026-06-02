@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+/* ── Light mode ── */
+:root {
+  --surface:    #ffffff;
+  --page:       #E1E5EE;
+  --ui-border:  #E1E5EE;
+  --subtle:     rgba(225,229,238,0.5);
+  --text-1:     #3C3744;
+  --text-2:     rgba(60,55,68,0.5);
+  --text-3:     rgba(60,55,68,0.3);
+  --sidebar-bg: #3C3744;
+}
+
+/* ── Dark mode ── */
+.dark {
+  --surface:    #2C2A38;
+  --page:       #1E1C26;
+  --ui-border:  rgba(255,255,255,0.08);
+  --subtle:     rgba(255,255,255,0.05);
+  --text-1:     #E1E5EE;
+  --text-2:     rgba(225,229,238,0.5);
+  --text-3:     rgba(225,229,238,0.3);
+  --sidebar-bg: #1A1820;
+}
+
+@theme inline {
+  --color-brand-dark:   #3C3744;
+  --color-brand-purple: #8380B6;
+  --color-brand-light:  #E1E5EE;
+  --color-brand-green:  #57A773;
+
+  /* Semantic tokens — auto-switch with dark mode */
+  --color-surface:   var(--surface);
+  --color-page:      var(--page);
+  --color-ui-border: var(--ui-border);
+  --color-subtle:    var(--subtle);
+  --color-text-1:    var(--text-1);
+  --color-text-2:    var(--text-2);
+  --color-text-3:    var(--text-3);
+  --color-sidebar:   var(--sidebar-bg);
+}
+
+body {
+  background: var(--page);
+  color: var(--text-1);
+}

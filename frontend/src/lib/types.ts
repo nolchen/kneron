@@ -1,0 +1,73 @@
+export interface TeamMember {
+  login: string;
+  role?: string;
+  workload_score: number;
+  repos_active: string[];
+  // GitHub-specific (optional — only present when synced from GitHub)
+  open_issues?: number;
+  open_prs?: number;
+  recent_commits?: number;
+}
+
+export interface Milestone {
+  id: number;
+  title: string;
+  description?: string;
+  due_on?: string;
+  open_issues: number;
+  closed_issues: number;
+  progress: number;
+  repo: string;
+}
+
+export interface Task {
+  number: number;
+  title: string;
+  url: string;
+  state: string;
+  labels: string[];
+  assignees: string[];
+  created_at: string;
+  updated_at: string;
+  repo: string;
+}
+
+export interface Project {
+  repo: string;
+  full_name: string;
+  description?: string;
+  open_issues_count: number;
+  open_prs_count: number;
+  milestones: Milestone[];
+}
+
+export interface Assignment {
+  id: string;
+  title: string;
+  assignees: string[];   // multiple workers
+  due_date: string;
+  priority: "low" | "medium" | "high";
+  status: "todo" | "in-progress" | "done";
+  notes: string;
+  created_at: string;
+}
+
+export interface Note {
+  id: string;
+  title: string;
+  content: string;
+  type: string;
+  created_at: string;
+}
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface SyncResult {
+  synced_repos: string[];
+  team_members: number;
+  open_issues: number;
+  open_prs: number;
+}
