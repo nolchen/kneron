@@ -24,18 +24,18 @@ _notes = NotesStore()
 MOCK_REPOS = ["kneron/backend-api", "kneron/mobile-app", "kneron/ml-pipeline"]
 
 MOCK_TEAM = [
-    {"login": "nolan_chen",    "role": "Backend Engineer",    "open_issues": 8,  "open_prs": 3, "recent_commits": 12, "repos_active": ["kneron/backend-api", "kneron/ml-pipeline"], "workload_score": 20.0},
-    {"login": "bobby_lee",     "role": "Mobile Engineer",     "open_issues": 5,  "open_prs": 2, "recent_commits": 9,  "repos_active": ["kneron/mobile-app"], "workload_score": 13.5},
-    {"login": "julia_aquino",  "role": "Full-Stack Engineer", "open_issues": 4,  "open_prs": 2, "recent_commits": 7,  "repos_active": ["kneron/backend-api", "kneron/mobile-app"], "workload_score": 11.5},
-    {"login": "thomas_train",  "role": "Backend Engineer",    "open_issues": 4,  "open_prs": 2, "recent_commits": 6,  "repos_active": ["kneron/backend-api"], "workload_score": 11.0},
-    {"login": "deez_nuts",     "role": "ML Engineer",         "open_issues": 3,  "open_prs": 1, "recent_commits": 6,  "repos_active": ["kneron/ml-pipeline"], "workload_score": 8.0},
-    {"login": "albert_liu",    "role": "DevOps Engineer",     "open_issues": 2,  "open_prs": 2, "recent_commits": 4,  "repos_active": ["kneron/backend-api"], "workload_score": 8.0},
-    {"login": "alice_wu",      "role": "Frontend Engineer",   "open_issues": 3,  "open_prs": 1, "recent_commits": 5,  "repos_active": ["kneron/mobile-app", "kneron/backend-api"], "workload_score": 7.5},
-    {"login": "jenna_wu",      "role": "ML Engineer",         "open_issues": 2,  "open_prs": 1, "recent_commits": 4,  "repos_active": ["kneron/ml-pipeline"], "workload_score": 6.0},
-    {"login": "maya_robinson", "role": "Mobile Engineer",     "open_issues": 2,  "open_prs": 1, "recent_commits": 3,  "repos_active": ["kneron/mobile-app"], "workload_score": 5.5},
-    {"login": "lisa_nguyen",   "role": "Frontend Engineer",   "open_issues": 1,  "open_prs": 1, "recent_commits": 2,  "repos_active": ["kneron/mobile-app"], "workload_score": 4.0},
-    {"login": "david_park",    "role": "Data Engineer",       "open_issues": 1,  "open_prs": 0, "recent_commits": 3,  "repos_active": ["kneron/ml-pipeline"], "workload_score": 2.5},
-    {"login": "ryan_torres",   "role": "QA Engineer",         "open_issues": 0,  "open_prs": 1, "recent_commits": 1,  "repos_active": ["kneron/ml-pipeline"], "workload_score": 2.5},
+    {"login": "nolan_chen",       "role": "Backend Engineer",    "open_issues": 8,  "open_prs": 3, "recent_commits": 12, "repos_active": ["kneron/backend-api", "kneron/ml-pipeline"], "workload_score": 20.0},
+    {"login": "bobby_lee",        "role": "Mobile Engineer",     "open_issues": 5,  "open_prs": 2, "recent_commits": 9,  "repos_active": ["kneron/mobile-app"], "workload_score": 13.5},
+    {"login": "julia_aquino",     "role": "Full-Stack Engineer", "open_issues": 4,  "open_prs": 2, "recent_commits": 7,  "repos_active": ["kneron/backend-api", "kneron/mobile-app"], "workload_score": 11.5},
+    {"login": "thomas_train",     "role": "Backend Engineer",    "open_issues": 4,  "open_prs": 2, "recent_commits": 6,  "repos_active": ["kneron/backend-api"], "workload_score": 11.0},
+    {"login": "deez_nuts",        "role": "ML Engineer",         "open_issues": 3,  "open_prs": 1, "recent_commits": 6,  "repos_active": ["kneron/ml-pipeline"], "workload_score": 8.0},
+    {"login": "albert_liu",       "role": "DevOps Engineer",     "open_issues": 2,  "open_prs": 2, "recent_commits": 4,  "repos_active": ["kneron/backend-api"], "workload_score": 8.0},
+    {"login": "alice_zhu",        "role": "Frontend Engineer",   "open_issues": 3,  "open_prs": 1, "recent_commits": 5,  "repos_active": ["kneron/mobile-app", "kneron/backend-api"], "workload_score": 7.5},
+    {"login": "jenna_wu",         "role": "ML Engineer",         "open_issues": 2,  "open_prs": 1, "recent_commits": 4,  "repos_active": ["kneron/ml-pipeline"], "workload_score": 6.0},
+    {"login": "chuddington_chad", "role": "Mobile Engineer",     "open_issues": 2,  "open_prs": 1, "recent_commits": 3,  "repos_active": ["kneron/mobile-app"], "workload_score": 5.5},
+    {"login": "drake_drizzy",     "role": "Frontend Engineer",   "open_issues": 1,  "open_prs": 1, "recent_commits": 2,  "repos_active": ["kneron/mobile-app"], "workload_score": 4.0},
+    {"login": "kendrick_llamar",  "role": "Data Engineer",       "open_issues": 1,  "open_prs": 0, "recent_commits": 3,  "repos_active": ["kneron/ml-pipeline"], "workload_score": 2.5},
+    {"login": "sandy_eggos",      "role": "QA Engineer",         "open_issues": 0,  "open_prs": 1, "recent_commits": 1,  "repos_active": ["kneron/ml-pipeline"], "workload_score": 2.5},
 ]
 
 MOCK_DATA = {
@@ -161,7 +161,10 @@ def _seed_mock(reset_assignments: bool = True):
     """Load demo data into the DB. Optionally wipe assignments (explicit reset only)."""
     # Base workload is 0 — workload comes entirely from assignments, so what you
     # see on the board fully explains each person's load.
-    db.replace_team_members([{**m, "workload_score": 0.0} for m in MOCK_TEAM])
+    db.replace_team_members([
+        {**m, "workload_score": 0.0, "email": f"{m['login'].replace('_', '.')}@kneron.us"}
+        for m in MOCK_TEAM
+    ])
     db.set_meta("github_snapshot", {
         "projects":       MOCK_DATA["projects"],
         "issues":         MOCK_DATA["issues"],
@@ -321,6 +324,7 @@ def add_member(body: TeamMemberCreate):
     member = {
         "login": login,
         "role": body.role,
+        "email": f"{login.replace('_', '.')}@kneron.us",
         "open_issues": 0, "open_prs": 0, "recent_commits": 0,
         "repos_active": repos,
         "workload_score": 0.0,

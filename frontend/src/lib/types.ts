@@ -1,6 +1,7 @@
 export interface TeamMember {
   login: string;
   role?: string;
+  email?: string;
   workload_score: number;
   repos_active: string[];
   // GitHub-specific (optional — only present when synced from GitHub)

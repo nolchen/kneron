@@ -33,6 +33,7 @@ def init_db():
             CREATE TABLE IF NOT EXISTS team_members (
                 login          TEXT PRIMARY KEY,
                 role           TEXT    DEFAULT '',
+                email          TEXT    DEFAULT '',
                 workload_score REAL    DEFAULT 0,
                 repos_active   TEXT    DEFAULT '[]',
                 open_issues    INTEGER DEFAULT 0,
@@ -40,6 +41,11 @@ def init_db():
                 recent_commits INTEGER DEFAULT 0
             )
         """)
+        # Migration: add email column to pre-existing tables (no-op if present)
+        try:
+            c.execute("ALTER TABLE team_members ADD COLUMN email TEXT DEFAULT ''")
+        except Exception:
+            pass
         c.execute("""
             CREATE TABLE IF NOT EXISTS assignments (
                 id         TEXT PRIMARY KEY,
@@ -74,9 +80,11 @@ def init_db():
 # ---------------------------------------------------------------------------
 
 def _row_to_member(r: sqlite3.Row) -> dict:
+    keys = r.keys()
     return {
         "login":          r["login"],
         "role":           r["role"],
+        "email":          r["email"] if "email" in keys else "",
         "workload_score": r["workload_score"],
         "repos_active":   json.loads(r["repos_active"] or "[]"),
         "open_issues":    r["open_issues"],
@@ -99,9 +107,9 @@ def member_exists(login: str) -> bool:
 def add_team_member(m: dict) -> dict:
     with _lock, _conn() as c:
         c.execute(
-            "INSERT INTO team_members (login, role, workload_score, repos_active, open_issues, open_prs, recent_commits) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (m["login"], m.get("role", ""), m.get("workload_score", 0),
+            "INSERT INTO team_members (login, role, email, workload_score, repos_active, open_issues, open_prs, recent_commits) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (m["login"], m.get("role", ""), m.get("email", ""), m.get("workload_score", 0),
              json.dumps(m.get("repos_active", [])),
              m.get("open_issues", 0), m.get("open_prs", 0), m.get("recent_commits", 0)),
         )
@@ -120,9 +128,9 @@ def replace_team_members(members: list[dict]):
         c.execute("DELETE FROM team_members")
         for m in members:
             c.execute(
-                "INSERT OR REPLACE INTO team_members (login, role, workload_score, repos_active, open_issues, open_prs, recent_commits) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (m["login"], m.get("role", ""), m.get("workload_score", 0),
+                "INSERT OR REPLACE INTO team_members (login, role, email, workload_score, repos_active, open_issues, open_prs, recent_commits) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (m["login"], m.get("role", ""), m.get("email", ""), m.get("workload_score", 0),
                  json.dumps(m.get("repos_active", [])),
                  m.get("open_issues", 0), m.get("open_prs", 0), m.get("recent_commits", 0)),
             )

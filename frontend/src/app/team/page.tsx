@@ -137,7 +137,8 @@ export default function TeamPage() {
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-text-1 truncate">{formatName(member.login)}</p>
                   {member.role && <p className="text-xs text-text-2 truncate">{member.role}</p>}
-                  <WorkloadBadge score={member.workload_score} />
+                  {member.email && <p className="text-xs text-text-3 truncate">{member.email}</p>}
+                  <div className="mt-1"><WorkloadBadge score={member.workload_score} /></div>
                 </div>
               </div>
 
