@@ -4,7 +4,7 @@ services:
   - type: web
     name: pm-agent-api
     runtime: python
-    rootDir: Kneron/backend
+    rootDir: backend
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
@@ -13,9 +13,7 @@ services:
         value: groq
       - key: GROQ_API_KEY        # paste your Groq key in the Render dashboard
         sync: false
-      - key: EMBED_PROVIDER      # "openai" for notes search, or leave as-is to skip it
-        value: openai
-      - key: OPENAI_API_KEY      # only needed if EMBED_PROVIDER=openai
-        sync: false
+      - key: EMBED_PROVIDER      # ollama = skip notes-search (truly free). Set "openai" + OPENAI_API_KEY to enable it.
+        value: ollama
       - key: ALLOWED_ORIGINS     # your Vercel URL, e.g. https://your-app.vercel.app
         sync: false

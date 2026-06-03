@@ -28,7 +28,7 @@ Three free accounts: **Vercel**, **Render**, **Groq**. No credit card needed for
 
 1. Make sure your code is pushed to GitHub (done).
 2. **render.com** → sign up → **New** → **Blueprint**.
-3. Connect your GitHub repo. Render finds `Kneron/backend/render.yaml` and sets everything up.
+3. Connect your GitHub repo. Render finds `backend/render.yaml` and sets everything up.
 4. It'll prompt you for the secret values:
    - `GROQ_API_KEY` = your key from Part 1
    - `ALLOWED_ORIGINS` = leave blank for now (you'll fill it after Part 3)
@@ -47,7 +47,7 @@ Three free accounts: **Vercel**, **Render**, **Groq**. No credit card needed for
 ## Part 3 — Deploy the frontend to Vercel
 
 1. **vercel.com** → sign up → **Add New Project** → import your repo.
-2. Set **Root Directory** to `Kneron/frontend`.
+2. Set **Root Directory** to `frontend`.
 3. Add an **Environment Variable**:
    ```
    NEXT_PUBLIC_API_URL = https://pm-agent-api.onrender.com   (your Render URL)
