@@ -4,6 +4,7 @@ Saves reports/summaries as searchable vector embeddings using ChromaDB + nomic-e
 Thread-safe: uses a lock so concurrent FastAPI requests don't conflict on the SQLite file.
 """
 
+import os
 import threading
 import uuid
 import httpx
@@ -11,19 +12,25 @@ import chromadb
 from datetime import datetime
 from pathlib import Path
 
-OLLAMA_BASE = "http://localhost:11434"
-EMBED_MODEL = "nomic-embed-text"
-DB_PATH     = str(Path(__file__).parent / "notes_db")
+from llm_config import embed_config
+
+# Honor DATA_DIR so the vector store can live on a persistent volume in production.
+_DATA_DIR = Path(os.environ.get("DATA_DIR", Path(__file__).parent))
+DB_PATH   = str(_DATA_DIR / "notes_db")
 
 _lock = threading.Lock()
 
 
 def _embed(text: str) -> list[float]:
-    r = httpx.post(
-        f"{OLLAMA_BASE}/api/embeddings",
-        json={"model": EMBED_MODEL, "prompt": text},
-        timeout=30,
-    )
+    cfg = embed_config()
+    if cfg["style"] == "openai":
+        headers = {"Authorization": f"Bearer {cfg['api_key']}"}
+        r = httpx.post(cfg["url"], headers=headers,
+                       json={"model": cfg["model"], "input": text}, timeout=30)
+        r.raise_for_status()
+        return r.json()["data"][0]["embedding"]
+    # ollama style
+    r = httpx.post(cfg["url"], json={"model": cfg["model"], "prompt": text}, timeout=30)
     r.raise_for_status()
     return r.json()["embedding"]
 

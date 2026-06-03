@@ -29,7 +29,7 @@ export default function SetupBanner({ repos, onSynced }: Props) {
 
   const handleDemo = async () => {
     setDemoing(true); setError("");
-    try { await fetch("http://localhost:8000/api/mock", { method: "POST" }); onSynced(); }
+    try { await api.loadMock(); onSynced(); }
     catch (e: unknown) { setError(e instanceof Error ? e.message : "Failed"); }
     finally { setDemoing(false); }
   };

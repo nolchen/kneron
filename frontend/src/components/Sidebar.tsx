@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, Map, ListOrdered,
   MessageSquare, Bot, CalendarDays, ClipboardList,
-  Sun, Moon, BookOpen,
+  Sun, Moon, BookOpen, Mail,
 } from "lucide-react";
 import { useTheme } from "@/lib/useTheme";
 
@@ -17,6 +17,7 @@ const NAV = [
   { href: "/priorities",   label: "Priorities",    icon: ListOrdered },
   { href: "/calendar",     label: "Calendar",      icon: CalendarDays },
   { href: "/reports",      label: "Reports",       icon: BookOpen },
+  { href: "/email",        label: "Email",         icon: Mail },
   { href: "/chat",         label: "AI PM Chat",    icon: MessageSquare },
 ];
 

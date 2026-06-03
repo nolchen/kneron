@@ -1,0 +1,21 @@
+# Render Blueprint — deploys the backend as a free web service.
+# In Render: New ► Blueprint ► point at this repo. It reads this file.
+services:
+  - type: web
+    name: pm-agent-api
+    runtime: python
+    rootDir: Kneron/backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: LLM_PROVIDER
+        value: groq
+      - key: GROQ_API_KEY        # paste your Groq key in the Render dashboard
+        sync: false
+      - key: EMBED_PROVIDER      # "openai" for notes search, or leave as-is to skip it
+        value: openai
+      - key: OPENAI_API_KEY      # only needed if EMBED_PROVIDER=openai
+        sync: false
+      - key: ALLOWED_ORIGINS     # your Vercel URL, e.g. https://your-app.vercel.app
+        sync: false

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { AlertCircle, ClipboardList, Users, FolderGit2, RefreshCw, Bot, AlertTriangle, XCircle, Info } from "lucide-react";
+import { AlertCircle, ClipboardList, Users, FolderGit2, RefreshCw, Bot, AlertTriangle, XCircle, Info, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { TeamMember, Project, Assignment } from "@/lib/types";
 import { formatName } from "@/lib/utils";
@@ -10,21 +10,28 @@ import SetupBanner from "@/components/SetupBanner";
 
 interface Alert { type: "error" | "warning" | "info"; msg: string; }
 
-function AlertBanner({ alerts }: { alerts: Alert[] }) {
+function AlertBanner({ alerts, onDismiss }: { alerts: Alert[]; onDismiss: (msg: string) => void }) {
   if (!alerts.length) return null;
   const cfg = {
-    error:   { bg: "bg-red-50 border-red-200",           icon: <XCircle      className="h-4 w-4 text-red-500 shrink-0" />,    text: "text-red-700" },
-    warning: { bg: "bg-orange-50 border-orange-200",      icon: <AlertTriangle className="h-4 w-4 text-orange-500 shrink-0" />, text: "text-orange-700" },
-    info:    { bg: "bg-brand-purple/10 border-brand-purple/20", icon: <Info    className="h-4 w-4 text-brand-purple shrink-0" />, text: "text-brand-purple" },
+    error:   { bg: "bg-red-50 border-red-200",           icon: <XCircle      className="h-4 w-4 text-red-500 shrink-0" />,    text: "text-red-700",    hover: "hover:bg-red-100" },
+    warning: { bg: "bg-orange-50 border-orange-200",      icon: <AlertTriangle className="h-4 w-4 text-orange-500 shrink-0" />, text: "text-orange-700", hover: "hover:bg-orange-100" },
+    info:    { bg: "bg-brand-purple/10 border-brand-purple/20", icon: <Info    className="h-4 w-4 text-brand-purple shrink-0" />, text: "text-brand-purple", hover: "hover:bg-brand-purple/20" },
   };
   return (
     <div className="flex flex-col gap-2 mb-6">
-      {alerts.map((a, i) => {
+      {alerts.map((a) => {
         const c = cfg[a.type];
         return (
-          <div key={i} className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${c.bg}`}>
+          <div key={a.msg} className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${c.bg}`}>
             {c.icon}
-            <p className={`text-sm font-medium ${c.text}`}>{a.msg}</p>
+            <p className={`text-sm font-medium flex-1 ${c.text}`}>{a.msg}</p>
+            <button
+              onClick={() => onDismiss(a.msg)}
+              className={`shrink-0 rounded-md p-1 ${c.hover} transition-colors`}
+              title="Dismiss"
+            >
+              <X className={`h-3.5 w-3.5 ${c.text}`} />
+            </button>
           </div>
         );
       })}
@@ -57,12 +64,17 @@ export default function DashboardPage() {
   const [loading, setLoading]   = useState(true);
   const [syncing, setSyncing]   = useState(false);
   const [hasData, setHasData]   = useState(false);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [dismissed, setDismissed] = useState<string[]>([]);
 
   const loadData = useCallback(async () => {
     try {
-      const [teamRes, projRes] = await Promise.all([api.getTeam(), api.getProjects()]);
+      const [teamRes, projRes, assignRes] = await Promise.all([
+        api.getTeam(), api.getProjects(), api.getAssignments(),
+      ]);
       setTeam(teamRes.team_members);
       setProjects(projRes.projects);
+      setAssignments(assignRes.assignments);
       setHasData(true);
     } catch { setHasData(false); }
   }, []);
@@ -107,6 +119,39 @@ export default function DashboardPage() {
     pct: Math.round((m.workload_score / maxScore) * 100),
   }));
 
+  // ── Auto-generated alerts ──
+  const alerts: Alert[] = [];
+  const now = Date.now();
+
+  // Overdue assignments
+  const overdue = assignments.filter(
+    (a) => a.status !== "done" && a.due_date && new Date(a.due_date).getTime() < now
+  );
+  if (overdue.length > 0) {
+    alerts.push({ type: "error", msg: `${overdue.length} assignment${overdue.length > 1 ? "s are" : " is"} overdue` });
+  }
+
+  // Overloaded team members (score ≥ 10)
+  const overloaded = team.filter((m) => m.workload_score >= 10);
+  overloaded.slice(0, 3).forEach((m) => {
+    const pct = Math.round((m.workload_score / maxScore) * 100);
+    alerts.push({ type: "warning", msg: `${formatName(m.login)} is overloaded (${pct}% workload)` });
+  });
+
+  // Milestones at risk (due within 10 days, < 80% progress)
+  projects.forEach((p) => {
+    p.milestones.forEach((ms) => {
+      if (!ms.due_on) return;
+      const days = Math.ceil((new Date(ms.due_on).getTime() - now) / 86_400_000);
+      if (days >= 0 && days <= 10 && ms.progress < 80) {
+        alerts.push({ type: "info", msg: `"${ms.title}" is due in ${days}d at ${ms.progress.toFixed(0)}% complete` });
+      }
+    });
+  });
+
+  const visibleAlerts = alerts.filter((a) => !dismissed.includes(a.msg));
+  const dismissAlert = (msg: string) => setDismissed((prev) => [...prev, msg]);
+
   if (loading) return (
     <div className="flex h-full items-center justify-center">
       <RefreshCw className="h-6 w-6 animate-spin text-brand-purple" />
@@ -132,6 +177,8 @@ export default function DashboardPage() {
 
       {hasData && (
         <>
+          <AlertBanner alerts={visibleAlerts} onDismiss={dismissAlert} />
+
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
             <StatCard label="Open Tasks"      value={totalTasks}       icon={<AlertCircle  className="h-5 w-5 text-brand-purple" />} accent="bg-brand-purple/10" />
             <StatCard label="Team Members"    value={team.length}      icon={<Users         className="h-5 w-5 text-brand-green"  />} accent="bg-brand-green/10"  />

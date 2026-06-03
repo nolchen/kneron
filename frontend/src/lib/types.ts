@@ -52,6 +52,13 @@ export interface Assignment {
   created_at: string;
 }
 
+export interface EmailAccount {
+  email: string;
+  name: string;
+  connected_at: string;
+  last_synced: string;
+}
+
 export interface Note {
   id: string;
   title: string;

@@ -1,16 +1,13 @@
 """
-Program Manager Agent — calls Ollama directly via the OpenAI-compatible SDK.
-(Hermes Agent is still cloned for reference but we skip its complex init pipeline.)
+Program Manager Agent — calls any OpenAI-compatible LLM (Ollama / Groq / OpenAI).
+Provider is chosen via env vars; see llm_config.py.
 """
 
 import json
-import os
 from typing import Optional, List, Dict
 
 from openai import OpenAI
-
-OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1")
-DEFAULT_MODEL   = os.environ.get("OLLAMA_MODEL", "llama3.2")
+from llm_config import llm_config
 
 PM_SYSTEM_PROMPT = """\
 You are an expert AI Program Manager with access to a team's GitHub data. \
@@ -28,9 +25,12 @@ When analysing data:
 
 
 class ProgramManagerAgent:
-    def __init__(self, model: str = DEFAULT_MODEL):
-        self.model  = model
-        self.client = OpenAI(base_url=OLLAMA_BASE_URL, api_key="ollama")
+    def __init__(self, model: Optional[str] = None):
+        cfg = llm_config()
+        self.provider = cfg["provider"]
+        self.model    = model or cfg["model"]
+        # api_key must be non-empty for the SDK; Ollama ignores it
+        self.client = OpenAI(base_url=cfg["base_url"], api_key=cfg["api_key"] or "none")
 
     def _build_messages(
         self,

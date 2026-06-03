@@ -1,13 +1,13 @@
 import json
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, List
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, RedirectResponse
 from pydantic import BaseModel
 
 load_dotenv()
@@ -16,26 +16,23 @@ from github_client import GitHubClient
 from pm_agent import ProgramManagerAgent
 from notes_store import NotesStore
 from vault_client import write_note, scan_vault
+import db
+import email_client
 
 _notes = NotesStore()
 
-# ---------------------------------------------------------------------------
-# In-memory stores
-# ---------------------------------------------------------------------------
-_cache: dict       = {"data": None, "repos": []}
-_team_store: list  = []   # all team members (mock-seeded or manually added)
-_assignments: list = []   # user-created assignments
+MOCK_REPOS = ["kneron/backend-api", "kneron/mobile-app", "kneron/ml-pipeline"]
 
 MOCK_TEAM = [
-    {"login": "marcus_dev",    "role": "Backend Engineer",    "open_issues": 8,  "open_prs": 3, "recent_commits": 12, "repos_active": ["kneron/backend-api", "kneron/ml-pipeline"], "workload_score": 20.0},
-    {"login": "sarah_kim",     "role": "Mobile Engineer",     "open_issues": 5,  "open_prs": 2, "recent_commits": 9,  "repos_active": ["kneron/mobile-app"], "workload_score": 13.5},
-    {"login": "alex_chen",     "role": "Full-Stack Engineer", "open_issues": 4,  "open_prs": 2, "recent_commits": 7,  "repos_active": ["kneron/backend-api", "kneron/mobile-app"], "workload_score": 11.5},
-    {"login": "jessica_lee",   "role": "Backend Engineer",    "open_issues": 4,  "open_prs": 2, "recent_commits": 6,  "repos_active": ["kneron/backend-api"], "workload_score": 11.0},
-    {"login": "priya_patel",   "role": "ML Engineer",         "open_issues": 3,  "open_prs": 1, "recent_commits": 6,  "repos_active": ["kneron/ml-pipeline"], "workload_score": 8.0},
-    {"login": "jake_wilson",   "role": "DevOps Engineer",     "open_issues": 2,  "open_prs": 2, "recent_commits": 4,  "repos_active": ["kneron/backend-api"], "workload_score": 8.0},
-    {"login": "emma_zhang",    "role": "Frontend Engineer",   "open_issues": 3,  "open_prs": 1, "recent_commits": 5,  "repos_active": ["kneron/mobile-app", "kneron/backend-api"], "workload_score": 7.5},
-    {"login": "carlos_mendez", "role": "ML Engineer",         "open_issues": 2,  "open_prs": 1, "recent_commits": 4,  "repos_active": ["kneron/ml-pipeline"], "workload_score": 6.0},
-    {"login": "maya_robinson",  "role": "Mobile Engineer",    "open_issues": 2,  "open_prs": 1, "recent_commits": 3,  "repos_active": ["kneron/mobile-app"], "workload_score": 5.5},
+    {"login": "nolan_chen",    "role": "Backend Engineer",    "open_issues": 8,  "open_prs": 3, "recent_commits": 12, "repos_active": ["kneron/backend-api", "kneron/ml-pipeline"], "workload_score": 20.0},
+    {"login": "bobby_lee",     "role": "Mobile Engineer",     "open_issues": 5,  "open_prs": 2, "recent_commits": 9,  "repos_active": ["kneron/mobile-app"], "workload_score": 13.5},
+    {"login": "julia_aquino",  "role": "Full-Stack Engineer", "open_issues": 4,  "open_prs": 2, "recent_commits": 7,  "repos_active": ["kneron/backend-api", "kneron/mobile-app"], "workload_score": 11.5},
+    {"login": "thomas_train",  "role": "Backend Engineer",    "open_issues": 4,  "open_prs": 2, "recent_commits": 6,  "repos_active": ["kneron/backend-api"], "workload_score": 11.0},
+    {"login": "deez_nuts",     "role": "ML Engineer",         "open_issues": 3,  "open_prs": 1, "recent_commits": 6,  "repos_active": ["kneron/ml-pipeline"], "workload_score": 8.0},
+    {"login": "albert_liu",    "role": "DevOps Engineer",     "open_issues": 2,  "open_prs": 2, "recent_commits": 4,  "repos_active": ["kneron/backend-api"], "workload_score": 8.0},
+    {"login": "alice_wu",      "role": "Frontend Engineer",   "open_issues": 3,  "open_prs": 1, "recent_commits": 5,  "repos_active": ["kneron/mobile-app", "kneron/backend-api"], "workload_score": 7.5},
+    {"login": "jenna_wu",      "role": "ML Engineer",         "open_issues": 2,  "open_prs": 1, "recent_commits": 4,  "repos_active": ["kneron/ml-pipeline"], "workload_score": 6.0},
+    {"login": "maya_robinson", "role": "Mobile Engineer",     "open_issues": 2,  "open_prs": 1, "recent_commits": 3,  "repos_active": ["kneron/mobile-app"], "workload_score": 5.5},
     {"login": "lisa_nguyen",   "role": "Frontend Engineer",   "open_issues": 1,  "open_prs": 1, "recent_commits": 2,  "repos_active": ["kneron/mobile-app"], "workload_score": 4.0},
     {"login": "david_park",    "role": "Data Engineer",       "open_issues": 1,  "open_prs": 0, "recent_commits": 3,  "repos_active": ["kneron/ml-pipeline"], "workload_score": 2.5},
     {"login": "ryan_torres",   "role": "QA Engineer",         "open_issues": 0,  "open_prs": 1, "recent_commits": 1,  "repos_active": ["kneron/ml-pipeline"], "workload_score": 2.5},
@@ -77,23 +74,23 @@ MOCK_DATA = {
         },
     ],
     "issues": [
-        {"number": 312, "title": "API gateway crashes under sustained 5k rps load", "url": "#", "state": "open", "labels": ["blocker", "performance"], "assignees": ["marcus_dev"], "created_at": "2026-05-20T10:00:00Z", "updated_at": "2026-05-30T09:00:00Z", "repo": "kneron/backend-api"},
-        {"number": 289, "title": "OAuth token refresh fails after 1hr expiry", "url": "#", "state": "open", "labels": ["bug", "priority-high", "auth"], "assignees": ["alex_chen"], "created_at": "2026-05-18T08:00:00Z", "updated_at": "2026-05-29T14:00:00Z", "repo": "kneron/backend-api"},
-        {"number": 76,  "title": "App crashes on iOS 17.4 when camera permission denied", "url": "#", "state": "open", "labels": ["bug", "priority-high", "ios"], "assignees": ["sarah_kim"], "created_at": "2026-05-22T11:00:00Z", "updated_at": "2026-05-31T10:00:00Z", "repo": "kneron/mobile-app"},
-        {"number": 301, "title": "Rate limiter doesn't reset correctly on rolling window", "url": "#", "state": "open", "labels": ["bug", "priority-high"], "assignees": ["marcus_dev"], "created_at": "2026-05-25T09:00:00Z", "updated_at": "2026-05-31T08:00:00Z", "repo": "kneron/backend-api"},
-        {"number": 45,  "title": "KL720 inference latency spikes to 30ms on large batches", "url": "#", "state": "open", "labels": ["priority-high", "performance"], "assignees": ["priya_patel"], "created_at": "2026-05-21T13:00:00Z", "updated_at": "2026-05-28T16:00:00Z", "repo": "kneron/ml-pipeline"},
-        {"number": 88,  "title": "Push notifications silently dropped on Android 14", "url": "#", "state": "open", "labels": ["bug", "priority-medium", "android"], "assignees": ["sarah_kim", "jake_wilson"], "created_at": "2026-05-19T15:00:00Z", "updated_at": "2026-05-27T11:00:00Z", "repo": "kneron/mobile-app"},
-        {"number": 315, "title": "Add Prometheus metrics endpoint /metrics", "url": "#", "state": "open", "labels": ["enhancement", "priority-medium", "observability"], "assignees": ["jake_wilson"], "created_at": "2026-05-26T10:00:00Z", "updated_at": "2026-05-30T12:00:00Z", "repo": "kneron/backend-api"},
+        {"number": 312, "title": "API gateway crashes under sustained 5k rps load", "url": "#", "state": "open", "labels": ["blocker", "performance"], "assignees": ["nolan_chen"], "created_at": "2026-05-20T10:00:00Z", "updated_at": "2026-05-30T09:00:00Z", "repo": "kneron/backend-api"},
+        {"number": 289, "title": "OAuth token refresh fails after 1hr expiry", "url": "#", "state": "open", "labels": ["bug", "priority-high", "auth"], "assignees": ["julia_aquino"], "created_at": "2026-05-18T08:00:00Z", "updated_at": "2026-05-29T14:00:00Z", "repo": "kneron/backend-api"},
+        {"number": 76,  "title": "App crashes on iOS 17.4 when camera permission denied", "url": "#", "state": "open", "labels": ["bug", "priority-high", "ios"], "assignees": ["bobby_lee"], "created_at": "2026-05-22T11:00:00Z", "updated_at": "2026-05-31T10:00:00Z", "repo": "kneron/mobile-app"},
+        {"number": 301, "title": "Rate limiter doesn't reset correctly on rolling window", "url": "#", "state": "open", "labels": ["bug", "priority-high"], "assignees": ["nolan_chen"], "created_at": "2026-05-25T09:00:00Z", "updated_at": "2026-05-31T08:00:00Z", "repo": "kneron/backend-api"},
+        {"number": 45,  "title": "KL720 inference latency spikes to 30ms on large batches", "url": "#", "state": "open", "labels": ["priority-high", "performance"], "assignees": ["deez_nuts"], "created_at": "2026-05-21T13:00:00Z", "updated_at": "2026-05-28T16:00:00Z", "repo": "kneron/ml-pipeline"},
+        {"number": 88,  "title": "Push notifications silently dropped on Android 14", "url": "#", "state": "open", "labels": ["bug", "priority-medium", "android"], "assignees": ["bobby_lee", "albert_liu"], "created_at": "2026-05-19T15:00:00Z", "updated_at": "2026-05-27T11:00:00Z", "repo": "kneron/mobile-app"},
+        {"number": 315, "title": "Add Prometheus metrics endpoint /metrics", "url": "#", "state": "open", "labels": ["enhancement", "priority-medium", "observability"], "assignees": ["albert_liu"], "created_at": "2026-05-26T10:00:00Z", "updated_at": "2026-05-30T12:00:00Z", "repo": "kneron/backend-api"},
         {"number": 92,  "title": "Onboarding flow skips step 3 for new Android users", "url": "#", "state": "open", "labels": ["bug", "priority-medium"], "assignees": ["lisa_nguyen"], "created_at": "2026-05-24T09:00:00Z", "updated_at": "2026-05-29T10:00:00Z", "repo": "kneron/mobile-app"},
-        {"number": 48,  "title": "Add quantisation support for INT4 models", "url": "#", "state": "open", "labels": ["enhancement", "priority-medium"], "assignees": ["priya_patel", "ryan_torres"], "created_at": "2026-05-23T14:00:00Z", "updated_at": "2026-05-28T15:00:00Z", "repo": "kneron/ml-pipeline"},
-        {"number": 320, "title": "Write API v2 migration guide for external devs", "url": "#", "state": "open", "labels": ["documentation"], "assignees": ["alex_chen"], "created_at": "2026-05-27T11:00:00Z", "updated_at": "2026-05-31T09:00:00Z", "repo": "kneron/backend-api"},
+        {"number": 48,  "title": "Add quantisation support for INT4 models", "url": "#", "state": "open", "labels": ["enhancement", "priority-medium"], "assignees": ["deez_nuts", "ryan_torres"], "created_at": "2026-05-23T14:00:00Z", "updated_at": "2026-05-28T15:00:00Z", "repo": "kneron/ml-pipeline"},
+        {"number": 320, "title": "Write API v2 migration guide for external devs", "url": "#", "state": "open", "labels": ["documentation"], "assignees": ["julia_aquino"], "created_at": "2026-05-27T11:00:00Z", "updated_at": "2026-05-31T09:00:00Z", "repo": "kneron/backend-api"},
     ],
     "pull_requests": [
-        {"number": 334, "title": "fix: patch rolling-window rate limiter reset logic", "url": "#", "state": "open", "author": "marcus_dev", "assignees": ["alex_chen"], "created_at": "2026-05-30T10:00:00Z", "updated_at": "2026-05-31T08:00:00Z", "repo": "kneron/backend-api", "draft": False},
-        {"number": 335, "title": "feat: add /metrics Prometheus endpoint", "url": "#", "state": "open", "author": "jake_wilson", "assignees": ["marcus_dev"], "created_at": "2026-05-29T14:00:00Z", "updated_at": "2026-05-30T11:00:00Z", "repo": "kneron/backend-api", "draft": False},
-        {"number": 97,  "title": "fix: camera permission crash on iOS 17.4", "url": "#", "state": "open", "author": "sarah_kim", "assignees": ["alex_chen"], "created_at": "2026-05-31T09:00:00Z", "updated_at": "2026-05-31T10:00:00Z", "repo": "kneron/mobile-app", "draft": False},
-        {"number": 98,  "title": "fix: android push notification delivery", "url": "#", "state": "open", "author": "lisa_nguyen", "assignees": ["sarah_kim"], "created_at": "2026-05-28T16:00:00Z", "updated_at": "2026-05-29T09:00:00Z", "repo": "kneron/mobile-app", "draft": True},
-        {"number": 52,  "title": "perf: optimise batch inference loop for KL720", "url": "#", "state": "open", "author": "priya_patel", "assignees": ["ryan_torres"], "created_at": "2026-05-30T13:00:00Z", "updated_at": "2026-05-31T07:00:00Z", "repo": "kneron/ml-pipeline", "draft": False},
+        {"number": 334, "title": "fix: patch rolling-window rate limiter reset logic", "url": "#", "state": "open", "author": "nolan_chen", "assignees": ["julia_aquino"], "created_at": "2026-05-30T10:00:00Z", "updated_at": "2026-05-31T08:00:00Z", "repo": "kneron/backend-api", "draft": False},
+        {"number": 335, "title": "feat: add /metrics Prometheus endpoint", "url": "#", "state": "open", "author": "albert_liu", "assignees": ["nolan_chen"], "created_at": "2026-05-29T14:00:00Z", "updated_at": "2026-05-30T11:00:00Z", "repo": "kneron/backend-api", "draft": False},
+        {"number": 97,  "title": "fix: camera permission crash on iOS 17.4", "url": "#", "state": "open", "author": "bobby_lee", "assignees": ["julia_aquino"], "created_at": "2026-05-31T09:00:00Z", "updated_at": "2026-05-31T10:00:00Z", "repo": "kneron/mobile-app", "draft": False},
+        {"number": 98,  "title": "fix: android push notification delivery", "url": "#", "state": "open", "author": "lisa_nguyen", "assignees": ["bobby_lee"], "created_at": "2026-05-28T16:00:00Z", "updated_at": "2026-05-29T09:00:00Z", "repo": "kneron/mobile-app", "draft": True},
+        {"number": 52,  "title": "perf: optimise batch inference loop for KL720", "url": "#", "state": "open", "author": "deez_nuts", "assignees": ["ryan_torres"], "created_at": "2026-05-30T13:00:00Z", "updated_at": "2026-05-31T07:00:00Z", "repo": "kneron/ml-pipeline", "draft": False},
     ],
 }
 
@@ -106,16 +103,74 @@ def _gh() -> GitHubClient:
 
 
 def _pm() -> ProgramManagerAgent:
-    model = os.environ.get("OLLAMA_MODEL", "llama3.2")
-    return ProgramManagerAgent(model=model)
+    return ProgramManagerAgent()  # provider + model resolved from env (see llm_config.py)
+
+
+def _data_snapshot() -> Optional[dict]:
+    """The non-team GitHub/mock data (projects, issues, pull_requests), or None."""
+    return db.get_meta("github_snapshot")
+
+
+def _full_data() -> Optional[dict]:
+    """Assemble the complete data dict (team from DB + snapshot) for AI context / dashboards."""
+    snap = _data_snapshot()
+    if snap is None:
+        return None
+    return {"team_members": db.get_team_members(), **snap}
 
 
 def _require_data():
-    if not _cache["data"]:
+    if _data_snapshot() is None:
         raise HTTPException(
             status_code=400,
             detail="No data synced yet. POST /api/sync to fetch GitHub data first.",
         )
+
+
+def _issue_priority(labels: list) -> str:
+    """Map GitHub-style labels to an assignment priority."""
+    low = [l.lower() for l in labels]
+    if "blocker" in low or "priority-high" in low:
+        return "high"
+    if "bug" in low or "priority-medium" in low:
+        return "medium"
+    return "low"
+
+
+def _seed_assignments_from_issues():
+    """Turn the mock issues into real assignments so workload is driven by
+    visible work — no more phantom workload from a hidden base score."""
+    today = datetime.utcnow()
+    due_offset = {"high": 2, "medium": 7, "low": 14}
+    for idx, issue in enumerate(MOCK_DATA["issues"]):
+        p = _issue_priority(issue["labels"])
+        due = (today + timedelta(days=due_offset[p] + (idx % 5))).strftime("%Y-%m-%d")
+        db.add_assignment({
+            "id":         str(uuid.uuid4()),
+            "created_at": today.isoformat(),
+            "title":      issue["title"],
+            "assignees":  issue["assignees"],
+            "due_date":   due,
+            "priority":   p,
+            "status":     "in-progress" if issue["assignees"] else "todo",
+            "notes":      f"From {issue['repo']} · {', '.join(issue['labels'])}",
+        })
+
+
+def _seed_mock(reset_assignments: bool = True):
+    """Load demo data into the DB. Optionally wipe assignments (explicit reset only)."""
+    # Base workload is 0 — workload comes entirely from assignments, so what you
+    # see on the board fully explains each person's load.
+    db.replace_team_members([{**m, "workload_score": 0.0} for m in MOCK_TEAM])
+    db.set_meta("github_snapshot", {
+        "projects":       MOCK_DATA["projects"],
+        "issues":         MOCK_DATA["issues"],
+        "pull_requests":  MOCK_DATA["pull_requests"],
+    })
+    db.set_meta("repos", MOCK_REPOS)
+    if reset_assignments:
+        db.clear_assignments()
+        _seed_assignments_from_issues()
 
 
 # ---------------------------------------------------------------------------
@@ -123,9 +178,14 @@ def _require_data():
 # ---------------------------------------------------------------------------
 app = FastAPI(title="PM Dashboard API", version="1.0.0")
 
+# Allowed origins: localhost for dev + any URLs from ALLOWED_ORIGINS env (comma-separated).
+# Set ALLOWED_ORIGINS to your deployed frontend URL(s) in production.
+_default_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+_env_origins = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=_default_origins + _env_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -133,13 +193,15 @@ app.add_middleware(
 
 
 @app.on_event("startup")
-def auto_seed():
-    """Auto-load demo data on startup so the app is ready immediately."""
-    global _team_store, _assignments
-    _cache["data"] = MOCK_DATA
-    _cache["repos"] = ["kneron/backend-api", "kneron/mobile-app", "kneron/ml-pipeline"]
-    _team_store = [m.copy() for m in MOCK_TEAM]
-    print("[startup] Demo data loaded automatically.")
+def startup():
+    """Init the database. Seed demo data only on a fresh, empty DB —
+    existing data is preserved across restarts."""
+    db.init_db()
+    if not db.get_team_members() and _data_snapshot() is None:
+        _seed_mock(reset_assignments=True)
+        print("[startup] Fresh DB — demo data seeded.")
+    else:
+        print("[startup] Existing data found — loaded from database.")
 
 
 # ---------------------------------------------------------------------------
@@ -173,46 +235,47 @@ class AssignmentBody(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Routes
+# Routes1
 # ---------------------------------------------------------------------------
 
 @app.post("/api/mock")
 def load_mock():
-    global _team_store, _assignments
-    _cache["data"] = MOCK_DATA
-    _cache["repos"] = ["kneron/backend-api", "kneron/mobile-app", "kneron/ml-pipeline"]
-    _team_store = [m.copy() for m in MOCK_TEAM]
-    _assignments = []
-    return {"loaded": True, "team_members": len(_team_store)}
+    _seed_mock(reset_assignments=True)
+    return {"loaded": True, "team_members": len(db.get_team_members())}
 
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "cached_repos": _cache["repos"]}
+    return {"status": "ok", "cached_repos": db.get_meta("repos", [])}
 
 
 @app.get("/api/repos")
 def get_repos():
-    return {"repos": _cache["repos"]}
+    return {"repos": db.get_meta("repos", [])}
 
 
 @app.post("/api/repos")
 def set_repos(config: ReposConfig):
-    _cache["repos"] = config.repos
-    _cache["data"] = None  # invalidate cache
-    return {"repos": _cache["repos"]}
+    db.set_meta("repos", config.repos)
+    return {"repos": config.repos}
 
 
 @app.post("/api/sync")
 def sync(config: Optional[ReposConfig] = None):
-    repos = (config.repos if config else None) or _cache["repos"]
+    repos = (config.repos if config else None) or db.get_meta("repos", [])
     if not repos:
         raise HTTPException(400, "No repos configured. POST /api/repos first.")
     client = _gh()
     try:
         data = client.aggregate_team_data(repos)
-        _cache["data"] = data
-        _cache["repos"] = repos
+        # GitHub is the source of truth on sync — replace team + snapshot
+        db.replace_team_members(data["team_members"])
+        db.set_meta("github_snapshot", {
+            "projects":      data["projects"],
+            "issues":        data["issues"],
+            "pull_requests": data["pull_requests"],
+        })
+        db.set_meta("repos", repos)
         return {
             "synced_repos": repos,
             "team_members": len(data["team_members"]),
@@ -227,13 +290,13 @@ ASSIGNMENT_WEIGHT = {"high": 5, "medium": 3, "low": 1}
 
 @app.get("/api/team")
 def get_team():
-    source = _team_store if _team_store else (_cache["data"] or {}).get("team_members", [])
-    if not source and not _cache["data"]:
+    source = db.get_team_members()
+    if not source and _data_snapshot() is None:
         raise HTTPException(400, "No data synced yet. POST /api/sync to fetch GitHub data first.")
 
     # Compute extra workload from active assignments (shared across all assignees)
     extra: dict = {}
-    for a in _assignments:
+    for a in db.get_assignments():
         if a.get("assignees") and a.get("status") != "done":
             w = ASSIGNMENT_WEIGHT.get(a.get("priority", "medium"), 3)
             for login in a["assignees"]:
@@ -252,7 +315,7 @@ def get_team():
 @app.post("/api/team/member")
 def add_member(body: TeamMemberCreate):
     login = body.name.strip().lower().replace(" ", "_")
-    if any(m["login"] == login for m in _team_store):
+    if db.member_exists(login):
         raise HTTPException(400, f"Member '{login}' already exists")
     repos = [r.strip() for r in body.repos.split(",") if r.strip()]
     member = {
@@ -262,16 +325,13 @@ def add_member(body: TeamMemberCreate):
         "repos_active": repos,
         "workload_score": 0.0,
     }
-    _team_store.append(member)
+    db.add_team_member(member)
     return member
 
 
 @app.delete("/api/team/member/{login}")
 def remove_member(login: str):
-    global _team_store
-    before = len(_team_store)
-    _team_store = [m for m in _team_store if m["login"] != login]
-    if len(_team_store) == before:
+    if not db.delete_team_member(login):
         raise HTTPException(404, "Member not found")
     return {"deleted": login}
 
@@ -282,7 +342,7 @@ def remove_member(login: str):
 
 @app.get("/api/assignments")
 def get_assignments():
-    return {"assignments": _assignments}
+    return {"assignments": db.get_assignments()}
 
 
 @app.post("/api/assignments")
@@ -292,17 +352,16 @@ def create_assignment(body: AssignmentBody):
         "created_at": datetime.utcnow().isoformat(),
         **body.model_dump(),
     }
-    _assignments.append(a)
+    db.add_assignment(a)
     return a
 
 
 @app.put("/api/assignments/{aid}")
 def update_assignment(aid: str, body: AssignmentBody):
-    for i, a in enumerate(_assignments):
-        if a["id"] == aid:
-            _assignments[i] = {**a, **body.model_dump()}
-            return _assignments[i]
-    raise HTTPException(404, "Assignment not found")
+    updated = db.update_assignment(aid, body.model_dump())
+    if updated is None:
+        raise HTTPException(404, "Assignment not found")
+    return updated
 
 
 class AssignWorkers(BaseModel):
@@ -310,25 +369,21 @@ class AssignWorkers(BaseModel):
 
 @app.patch("/api/assignments/{aid}/assign")
 def assign_workers(aid: str, body: AssignWorkers):
-    for i, a in enumerate(_assignments):
-        if a["id"] == aid:
-            updated = {**a, "assignees": body.assignees}
-            # Auto-set status based on whether anyone is assigned
-            if body.assignees and a.get("status") == "todo":
-                updated["status"] = "in-progress"
-            elif not body.assignees and a.get("status") == "in-progress":
-                updated["status"] = "todo"
-            _assignments[i] = updated
-            return _assignments[i]
-    raise HTTPException(404, "Assignment not found")
+    a = db.get_assignment(aid)
+    if a is None:
+        raise HTTPException(404, "Assignment not found")
+    fields = {"assignees": body.assignees}
+    # Auto-set status based on whether anyone is assigned
+    if body.assignees and a.get("status") == "todo":
+        fields["status"] = "in-progress"
+    elif not body.assignees and a.get("status") == "in-progress":
+        fields["status"] = "todo"
+    return db.update_assignment(aid, fields)
 
 
 @app.delete("/api/assignments/{aid}")
 def delete_assignment(aid: str):
-    global _assignments
-    before = len(_assignments)
-    _assignments = [a for a in _assignments if a["id"] != aid]
-    if len(_assignments) == before:
+    if not db.delete_assignment(aid):
         raise HTTPException(404, "Assignment not found")
     return {"deleted": aid}
 
@@ -336,14 +391,14 @@ def delete_assignment(aid: str):
 @app.get("/api/projects")
 def get_projects():
     _require_data()
-    return {"projects": _cache["data"]["projects"]}
+    return {"projects": _data_snapshot()["projects"]}
 
 
 @app.get("/api/roadmap")
 def get_roadmap():
     _require_data()
     milestones = []
-    for project in _cache["data"]["projects"]:
+    for project in _data_snapshot()["projects"]:
         for ms in project.get("milestones", []):
             milestones.append({**ms, "repo": project["repo"]})
     milestones.sort(key=lambda m: (m.get("due_on") or "9999"))
@@ -363,7 +418,7 @@ def get_priorities():
             default=0,
         )
 
-    issues = sorted(_cache["data"]["issues"], key=score, reverse=True)
+    issues = sorted(_data_snapshot()["issues"], key=score, reverse=True)
     return {"priorities": issues}
 
 
@@ -371,12 +426,12 @@ def get_priorities():
 def get_summary():
     _require_data()
     agent = _pm()
-    summary = agent.summarize_status(_cache["data"])
+    summary = agent.summarize_status(_full_data())
     return {"summary": summary}
 
 
 def _chat_context(req: ChatRequest):
-    github_context = _cache["data"] if req.include_github else None
+    github_context = _full_data() if req.include_github else None
     history = [{"role": m.role, "content": m.content} for m in req.history] if req.history else None
     # RAG: search past notes for anything relevant to the question
     try:
@@ -443,7 +498,7 @@ def generate_and_save():
     """Non-streaming fallback — prefer /api/notes/generate/stream."""
     _require_data()
     agent   = _pm()
-    content = agent.summarize_status(_cache["data"])
+    content = agent.summarize_status(_full_data())
     title   = f"Team Status Report — {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC"
     note    = _notes.save(title=title, content=content, note_type="report")
     try:
@@ -461,7 +516,7 @@ def generate_and_save_stream():
     title = f"Team Status Report — {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC"
 
     # Trim context to key stats only — much faster than dumping full JSON
-    data = _cache["data"]
+    data = _full_data()
     slim_context = {
         "team_members": [
             {"login": m["login"], "role": m.get("role",""), "workload_score": m["workload_score"]}
@@ -561,3 +616,86 @@ def vault_status():
 def delete_note(note_id: str):
     _notes.delete(note_id)
     return {"deleted": note_id}
+
+
+# ---------------------------------------------------------------------------
+# Email integration (Microsoft 365 — each user connects their own inbox)
+# ---------------------------------------------------------------------------
+
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+
+
+@app.get("/api/email/status")
+def email_status():
+    """Whether email is configured + which accounts are connected."""
+    return {
+        "configured": email_client.is_configured(),
+        "accounts": db.list_email_accounts(),
+    }
+
+
+@app.get("/api/email/connect")
+def email_connect():
+    """Return the Microsoft sign-in URL for the user to grant inbox access."""
+    if not email_client.is_configured():
+        raise HTTPException(400, "Email is not configured. Set MS_CLIENT_ID / MS_CLIENT_SECRET.")
+    url = email_client.auth_url(state="pm-agent")
+    return {"auth_url": url}
+
+
+@app.get("/api/email/callback")
+def email_callback(code: str = "", error: str = "", error_description: str = ""):
+    """Microsoft redirects here after the user signs in. Exchange + store the token."""
+    if error:
+        return RedirectResponse(f"{FRONTEND_URL}/email?error={error}")
+    if not code:
+        return RedirectResponse(f"{FRONTEND_URL}/email?error=missing_code")
+    try:
+        tok = email_client.exchange_code(code)
+        db.save_email_account(
+            email=tok["email"], name=tok["name"],
+            refresh_token=tok["refresh_token"],
+            connected_at=datetime.utcnow().isoformat(),
+        )
+        return RedirectResponse(f"{FRONTEND_URL}/email?connected={tok['email']}")
+    except Exception as e:
+        return RedirectResponse(f"{FRONTEND_URL}/email?error={str(e)[:100]}")
+
+
+@app.post("/api/email/sync")
+def email_sync():
+    """Pull recent emails from every connected inbox into the RAG store
+    so the AI chat can reference them."""
+    if not email_client.is_configured():
+        raise HTTPException(400, "Email is not configured.")
+    accounts = db.get_all_email_accounts_full()
+    if not accounts:
+        raise HTTPException(400, "No inboxes connected yet.")
+
+    total = 0
+    errors = []
+    for acct in accounts:
+        try:
+            access = email_client.refresh_access_token(acct["refresh_token"])
+            messages = email_client.fetch_recent_messages(access, top=20)
+            for m in messages:
+                title   = f"Email: {m['subject']}"
+                content = (
+                    f"From: {m['from_name']} <{m['from']}>\n"
+                    f"Received: {m['received']}\n"
+                    f"To inbox: {acct['email']}\n\n{m['preview']}"
+                )
+                _notes.save(title=title, content=content, note_type="email")
+                total += 1
+            db.set_email_synced(acct["email"], datetime.utcnow().isoformat())
+        except Exception as e:
+            errors.append(f"{acct['email']}: {str(e)[:80]}")
+
+    return {"synced_emails": total, "accounts": len(accounts), "errors": errors}
+
+
+@app.delete("/api/email/accounts/{email}")
+def email_disconnect(email: str):
+    if not db.delete_email_account(email):
+        raise HTTPException(404, "Account not connected")
+    return {"disconnected": email}

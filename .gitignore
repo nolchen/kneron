@@ -18,8 +18,9 @@ hermes-agent/
 __pycache__/
 *.pyc
 
-# Local vector DB
+# Local databases (per-deployment data, not source)
 backend/notes_db/
+backend/pm_data.db
 
 # Obsidian settings
 PM-Vault/.obsidian/

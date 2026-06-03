@@ -4,12 +4,14 @@ Reads .md files from the vault into ChromaDB, and writes reports back as .md fil
 Obsidian picks up new files automatically — no plugin or API needed.
 """
 
+import os
 import re
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
 
-VAULT_PATH = Path(__file__).parent.parent / "PM-Vault"
+# VAULT_PATH env lets a host point this at a mounted Obsidian vault / volume.
+VAULT_PATH = Path(os.environ.get("VAULT_PATH", Path(__file__).parent.parent / "PM-Vault"))
 PM_FOLDER  = VAULT_PATH / "PM-Agent"   # sub-folder for app-generated notes
 
 

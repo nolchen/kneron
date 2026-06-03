@@ -1,4 +1,4 @@
-import { TeamMember, Project, Task, Milestone, ChatMessage, SyncResult, Assignment, Note } from "./types";
+import { TeamMember, Project, Task, Milestone, ChatMessage, SyncResult, Assignment, Note, EmailAccount } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -39,6 +39,8 @@ export const api = {
   getRepos:  () => req<{ repos: string[] }>("/api/repos"),
   setRepos:  (repos: string[]) => req<{ repos: string[] }>("/api/repos", { method: "POST", body: JSON.stringify({ repos }) }),
 
+  loadMock: () => req<{ loaded: boolean; team_members: number }>("/api/mock", { method: "POST" }),
+
   sync: (repos?: string[]) =>
     req<SyncResult>("/api/sync", {
       method: "POST",
@@ -71,6 +73,11 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ assignees }),
     }),
+
+  emailStatus:    () => req<{ configured: boolean; accounts: EmailAccount[] }>("/api/email/status"),
+  emailConnect:   () => req<{ auth_url: string }>("/api/email/connect"),
+  emailSync:      () => req<{ synced_emails: number; accounts: number; errors: string[] }>("/api/email/sync", { method: "POST" }),
+  emailDisconnect: (email: string) => req<{ disconnected: string }>(`/api/email/accounts/${encodeURIComponent(email)}`, { method: "DELETE" }),
 
   getNotes:       () => req<{ notes: Note[] }>("/api/notes"),
   saveNote:       (title: string, content: string, note_type: string) =>
