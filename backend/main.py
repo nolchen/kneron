@@ -82,7 +82,7 @@ MOCK_DATA = {
         {"number": 88,  "title": "Push notifications silently dropped on Android 14", "url": "#", "state": "open", "labels": ["bug", "priority-medium", "android"], "assignees": ["bobby_lee", "albert_liu"], "created_at": "2026-05-19T15:00:00Z", "updated_at": "2026-05-27T11:00:00Z", "repo": "kneron/mobile-app"},
         {"number": 315, "title": "Add Prometheus metrics endpoint /metrics", "url": "#", "state": "open", "labels": ["enhancement", "priority-medium", "observability"], "assignees": ["albert_liu"], "created_at": "2026-05-26T10:00:00Z", "updated_at": "2026-05-30T12:00:00Z", "repo": "kneron/backend-api"},
         {"number": 92,  "title": "Onboarding flow skips step 3 for new Android users", "url": "#", "state": "open", "labels": ["bug", "priority-medium"], "assignees": ["chuddington_chad"], "created_at": "2026-05-24T09:00:00Z", "updated_at": "2026-05-29T10:00:00Z", "repo": "kneron/mobile-app"},
-        {"number": 48,  "title": "Add quantisation support for INT4 models", "url": "#", "state": "open", "labels": ["enhancement", "priority-medium"], "assignees": ["deez_nuts", "ryan_torres"], "created_at": "2026-05-23T14:00:00Z", "updated_at": "2026-05-28T15:00:00Z", "repo": "kneron/ml-pipeline"},
+        {"number": 48,  "title": "Add quantisation support for INT4 models", "url": "#", "state": "open", "labels": ["enhancement", "priority-medium"], "assignees": ["deez_nuts", "jenna_wu"], "created_at": "2026-05-23T14:00:00Z", "updated_at": "2026-05-28T15:00:00Z", "repo": "kneron/ml-pipeline"},
         {"number": 320, "title": "Write API v2 migration guide for external devs", "url": "#", "state": "open", "labels": ["documentation"], "assignees": ["julia_aquino"], "created_at": "2026-05-27T11:00:00Z", "updated_at": "2026-05-31T09:00:00Z", "repo": "kneron/backend-api"},
     ],
     "pull_requests": [
@@ -90,7 +90,7 @@ MOCK_DATA = {
         {"number": 335, "title": "feat: add /metrics Prometheus endpoint", "url": "#", "state": "open", "author": "albert_liu", "assignees": ["nolan_chen"], "created_at": "2026-05-29T14:00:00Z", "updated_at": "2026-05-30T11:00:00Z", "repo": "kneron/backend-api", "draft": False},
         {"number": 97,  "title": "fix: camera permission crash on iOS 17.4", "url": "#", "state": "open", "author": "bobby_lee", "assignees": ["julia_aquino"], "created_at": "2026-05-31T09:00:00Z", "updated_at": "2026-05-31T10:00:00Z", "repo": "kneron/mobile-app", "draft": False},
         {"number": 98,  "title": "fix: android push notification delivery", "url": "#", "state": "open", "author": "chuddington_chad", "assignees": ["bobby_lee"], "created_at": "2026-05-28T16:00:00Z", "updated_at": "2026-05-29T09:00:00Z", "repo": "kneron/mobile-app", "draft": True},
-        {"number": 52,  "title": "perf: optimise batch inference loop for KL720", "url": "#", "state": "open", "author": "deez_nuts", "assignees": ["ryan_torres"], "created_at": "2026-05-30T13:00:00Z", "updated_at": "2026-05-31T07:00:00Z", "repo": "kneron/ml-pipeline", "draft": False},
+        {"number": 52,  "title": "perf: optimise batch inference loop for KL720", "url": "#", "state": "open", "author": "deez_nuts", "assignees": ["jenna_wu"], "created_at": "2026-05-30T13:00:00Z", "updated_at": "2026-05-31T07:00:00Z", "repo": "kneron/ml-pipeline", "draft": False},
     ],
 }
 
