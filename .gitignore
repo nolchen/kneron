@@ -24,3 +24,13 @@ backend/pm_data.db
 
 # Obsidian settings
 PM-Vault/.obsidian/
+
+# Private/secret notes + tooling — kept fully local, never committed
+.notes.md
+.notes.md.enc
+.secret*
+.private/
+secret.sh
+
+# Generated demo status reports (runtime artifacts, not source)
+PM-Vault/PM-Agent/Team Status Report *
