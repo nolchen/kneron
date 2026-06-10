@@ -519,24 +519,9 @@ def generate_and_save_stream():
     agent = _pm()
     title = f"Team Status Report — {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC"
 
-    # Trim context to key stats only — much faster than dumping full JSON
+    # _build_messages slims this down to key stats; pass the full snapshot
+    # so it has the keys it expects (matches /api/chat/stream and /api/summary).
     data = _full_data()
-    slim_context = {
-        "team_members": [
-            {"login": m["login"], "role": m.get("role",""), "workload_score": m["workload_score"]}
-            for m in data.get("team_members", [])
-        ],
-        "projects": [
-            {"repo": p["repo"], "open_issues": p["open_issues_count"], "open_prs": p["open_prs_count"],
-             "milestones": [{"title": ms["title"], "progress": ms["progress"], "due_on": ms.get("due_on","")}
-                            for ms in p.get("milestones", [])]}
-            for p in data.get("projects", [])
-        ],
-        "top_issues": [
-            {"title": i["title"], "labels": i["labels"], "assignees": i["assignees"]}
-            for i in data.get("issues", [])[:8]
-        ],
-    }
 
     prompt = (
         "Write a concise executive status report (8-10 bullet points) covering: "
@@ -549,7 +534,7 @@ def generate_and_save_stream():
     def generate():
         for chunk in agent.stream_chat(
             user_message=prompt,
-            github_context=slim_context,
+            github_context=data,
         ):
             chunks_collected.append(chunk)
             yield f"data: {json.dumps({'chunk': chunk})}\n\n"
