@@ -116,7 +116,7 @@ def _full_data() -> Optional[dict]:
     snap = _data_snapshot()
     if snap is None:
         return None
-    return {"team_members": db.get_team_members(), **snap}
+    return {"team_members": _team_with_workload(), **snap}
 
 
 def _require_data():
@@ -291,13 +291,12 @@ def sync(config: Optional[ReposConfig] = None):
 
 ASSIGNMENT_WEIGHT = {"high": 5, "medium": 3, "low": 1}
 
-@app.get("/api/team")
-def get_team():
-    source = db.get_team_members()
-    if not source and _data_snapshot() is None:
-        raise HTTPException(400, "No data synced yet. POST /api/sync to fetch GitHub data first.")
 
-    # Compute extra workload from active assignments (shared across all assignees)
+def _team_with_workload() -> list[dict]:
+    """Team members with workload_score derived from active assignments.
+    The stored base score is 0 — load comes entirely from assigned, non-done
+    work — so this must be applied wherever team data is consumed (dashboard
+    AND the AI context), or workload reads as 0."""
     extra: dict = {}
     for a in db.get_assignments():
         if a.get("assignees") and a.get("status") != "done":
@@ -306,13 +305,19 @@ def get_team():
                 extra[login] = extra.get(login, 0) + w
 
     members = []
-    for m in source:
+    for m in db.get_team_members():
         mc = m.copy()
         mc["workload_score"] = round(m.get("workload_score", 0) + extra.get(m["login"], 0), 1)
         members.append(mc)
 
     members.sort(key=lambda m: m["workload_score"], reverse=True)
-    return {"team_members": members}
+    return members
+
+@app.get("/api/team")
+def get_team():
+    if not db.get_team_members() and _data_snapshot() is None:
+        raise HTTPException(400, "No data synced yet. POST /api/sync to fetch GitHub data first.")
+    return {"team_members": _team_with_workload()}
 
 
 @app.post("/api/team/member")
