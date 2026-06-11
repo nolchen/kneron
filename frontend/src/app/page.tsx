@@ -2,10 +2,10 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { AlertCircle, ClipboardList, Users, FolderGit2, RefreshCw, Bot, AlertTriangle, XCircle, Info, X } from "lucide-react";
+import { AlertCircle, ClipboardList, Users, FolderGit2, RefreshCw, Bot, AlertTriangle, XCircle, Info, X, BookOpen } from "lucide-react";
 import { api } from "@/lib/api";
 import { TeamMember, Project, Assignment } from "@/lib/types";
-import { formatName } from "@/lib/utils";
+import { formatName, obsidianVaultUri } from "@/lib/utils";
 import SetupBanner from "@/components/SetupBanner";
 
 interface Alert { type: "error" | "warning" | "info"; msg: string; }
@@ -165,12 +165,19 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-bold text-text-1">Dashboard</h1>
           <p className="text-sm text-text-2 mt-1">AI Program Manager — Powered by Hermes Agent</p>
         </div>
-        {hasData && (
-          <button onClick={handleResync} disabled={syncing}
-            className="flex items-center gap-2 rounded-lg border border-ui-border bg-surface px-4 py-2 text-sm font-medium text-text-1 hover:bg-subtle shadow-sm disabled:opacity-50">
-            <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} /> Resync
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          <a href={obsidianVaultUri()}
+            title="Open the evidence vault in Obsidian — every report and stat traces back here"
+            className="flex items-center gap-2 rounded-lg border border-brand-purple/40 bg-brand-purple/10 px-4 py-2 text-sm font-medium text-brand-purple hover:bg-brand-purple/20 shadow-sm">
+            <BookOpen className="h-4 w-4" /> Open in Obsidian
+          </a>
+          {hasData && (
+            <button onClick={handleResync} disabled={syncing}
+              className="flex items-center gap-2 rounded-lg border border-ui-border bg-surface px-4 py-2 text-sm font-medium text-text-1 hover:bg-subtle shadow-sm disabled:opacity-50">
+              <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} /> Resync
+            </button>
+          )}
+        </div>
       </div>
 
       {!hasData && <SetupBanner repos={repos} onSynced={handleSynced} />}

@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Note } from "@/lib/types";
-import { RefreshCw, FileText, Trash2, Plus, Bot, BookOpen, Download, FolderSync } from "lucide-react";
+import { RefreshCw, FileText, Trash2, Plus, Bot, BookOpen, Download, FolderSync, ExternalLink } from "lucide-react";
+import { obsidianSearchUri } from "@/lib/utils";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -213,6 +214,11 @@ export default function ReportsPage() {
                 <p className="text-xs text-text-3 mt-1">{formatDate(selected.created_at)}</p>
               </div>
               <div className="flex gap-2 shrink-0">
+                <a href={obsidianSearchUri(selected.title)}
+                  title="Open this report's source note in Obsidian"
+                  className="flex items-center gap-1.5 rounded-lg border border-brand-purple/40 bg-brand-purple/10 px-3 py-1.5 text-xs text-brand-purple hover:bg-brand-purple/20">
+                  <ExternalLink className="h-3.5 w-3.5" /> Open in Obsidian
+                </a>
                 <button onClick={() => handleDownload(selected)}
                   className="flex items-center gap-1.5 rounded-lg border border-ui-border px-3 py-1.5 text-xs text-text-2 hover:bg-subtle">
                   <Download className="h-3.5 w-3.5" /> Download
