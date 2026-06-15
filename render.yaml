@@ -1,0 +1,20 @@
+# Render Blueprint (repo root) — one-click backend deploy.
+# In Render: New ► Blueprint ► point at this repo. Render auto-detects this file
+# and pre-fills the service below; you only paste the secret values it asks for.
+services:
+  - type: web
+    name: pm-agent-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: LLM_PROVIDER
+        value: groq
+      - key: GROQ_API_KEY        # paste your Groq key (gsk_...) in the Render dashboard
+        sync: false
+      - key: EMBED_PROVIDER      # ollama = skip notes-search (truly free). Chat + reports still work.
+        value: ollama
+      - key: ALLOWED_ORIGINS     # your Vercel URL, e.g. https://your-app.vercel.app
+        sync: false
