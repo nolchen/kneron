@@ -14,7 +14,7 @@ services:
         value: groq
       - key: GROQ_API_KEY        # paste your Groq key (gsk_...) in the Render dashboard
         sync: false
-      - key: EMBED_PROVIDER      # ollama = skip notes-search (truly free). Chat + reports still work.
-        value: ollama
+      - key: EMBED_PROVIDER      # none = truly free; reports save & display, semantic notes-search is skipped.
+        value: none
       - key: ALLOWED_ORIGINS     # your Vercel URL, e.g. https://your-app.vercel.app
         sync: false

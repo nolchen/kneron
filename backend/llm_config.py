@@ -52,6 +52,11 @@ def embed_config() -> dict:
     (local) or OpenAI (cloud)."""
     provider = os.environ.get("EMBED_PROVIDER", "ollama").lower()
 
+    # No embedding backend (e.g. free cloud tier with no Ollama/OpenAI). Notes
+    # still save via a deterministic fallback vector; semantic search is skipped.
+    if provider in ("none", "skip", "disabled", "off"):
+        return {"provider": "none", "style": "none"}
+
     if provider == "openai":
         return {
             "provider": "openai",

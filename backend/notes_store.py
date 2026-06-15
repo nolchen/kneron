@@ -5,6 +5,7 @@ Thread-safe: uses a lock so concurrent FastAPI requests don't conflict on the SQ
 """
 
 import os
+import hashlib
 import threading
 import uuid
 import httpx
@@ -13,6 +14,18 @@ from datetime import datetime
 from pathlib import Path
 
 from llm_config import embed_config
+
+# Dimension of the deterministic fallback vector used when no embedding backend
+# is reachable. Lets reports save (and list/display) even with no Ollama/OpenAI.
+_FALLBACK_DIM = 256
+
+
+def _fallback_embedding(text: str) -> list[float]:
+    """Deterministic pseudo-embedding so notes can still be stored when no real
+    embedding provider is available (free cloud tier). Semantic search is
+    effectively disabled, but reports save, list, and display normally."""
+    h = hashlib.sha256(text.encode("utf-8")).digest()
+    return [(h[i % len(h)] / 127.5) - 1.0 for i in range(_FALLBACK_DIM)]
 
 # Honor DATA_DIR so the vector store can live on a persistent volume in production.
 _DATA_DIR = Path(os.environ.get("DATA_DIR", Path(__file__).parent))
@@ -23,6 +36,8 @@ _lock = threading.Lock()
 
 def _embed(text: str) -> list[float]:
     cfg = embed_config()
+    if cfg["style"] == "none":
+        raise RuntimeError("embeddings disabled (EMBED_PROVIDER=none)")
     if cfg["style"] == "openai":
         headers = {"Authorization": f"Bearer {cfg['api_key']}"}
         r = httpx.post(cfg["url"], headers=headers,
@@ -42,7 +57,11 @@ class NotesStore:
 
     def save(self, title: str, content: str, note_type: str = "report") -> dict:
         note_id   = str(uuid.uuid4())
-        embedding = _embed(content)
+        try:
+            embedding = _embed(content)
+        except Exception as e:
+            print(f"[notes] Embedding unavailable, saving without semantic search: {e}")
+            embedding = _fallback_embedding(content)
         created   = datetime.utcnow().isoformat()
         with _lock:
             self._collection.add(
@@ -59,7 +78,11 @@ class NotesStore:
             total = self._collection.count()
             if total == 0:
                 return []
-            embedding = _embed(query)
+            try:
+                embedding = _embed(query)
+            except Exception as e:
+                print(f"[notes] Embedding unavailable, semantic search disabled: {e}")
+                return []
             results   = self._collection.query(
                 query_embeddings=[embedding],
                 n_results=min(n, total),
