@@ -271,22 +271,33 @@ def sync(config: Optional[ReposConfig] = None):
     client = _gh()
     try:
         data = client.aggregate_team_data(repos)
-        # GitHub is the source of truth on sync — replace team + snapshot
-        db.replace_team_members(data["team_members"])
-        db.set_meta("github_snapshot", {
-            "projects":      data["projects"],
-            "issues":        data["issues"],
-            "pull_requests": data["pull_requests"],
-        })
-        db.set_meta("repos", repos)
-        return {
-            "synced_repos": repos,
-            "team_members": len(data["team_members"]),
-            "open_issues": len(data["issues"]),
-            "open_prs": len(data["pull_requests"]),
-        }
     finally:
         client.close()
+
+    # Safety: a real sync always returns at least one project. If we got nothing,
+    # the fetch failed (no GITHUB_TOKEN, or private/nonexistent repos) — do NOT
+    # overwrite existing data with empties (that wipes the dashboard). Bail loudly.
+    if not data["projects"] and not data["team_members"]:
+        raise HTTPException(
+            502,
+            "GitHub sync returned no data — check that GITHUB_TOKEN is set and the "
+            "repos are accessible. Your existing data was left unchanged.",
+        )
+
+    # GitHub is the source of truth on a successful sync — replace team + snapshot
+    db.replace_team_members(data["team_members"])
+    db.set_meta("github_snapshot", {
+        "projects":      data["projects"],
+        "issues":        data["issues"],
+        "pull_requests": data["pull_requests"],
+    })
+    db.set_meta("repos", repos)
+    return {
+        "synced_repos": repos,
+        "team_members": len(data["team_members"]),
+        "open_issues": len(data["issues"]),
+        "open_prs": len(data["pull_requests"]),
+    }
 
 
 ASSIGNMENT_WEIGHT = {"high": 5, "medium": 3, "low": 1}
