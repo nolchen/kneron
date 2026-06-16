@@ -114,3 +114,10 @@ See [DEPLOY.md](./DEPLOY.md) for a free step-by-step (Vercel + Render + Groq).
   auth before opening it wider.
 - The app ships with mock data so it runs without any external services. Connect a real
   GitHub org by setting `GITHUB_TOKEN` and syncing repos from the dashboard.
+
+---
+
+<sub>🥚 <b>For the curious dev who reads this far:</b> there's a locked note in this repo —
+<code>.notes.md.enc</code>, AES-256. Run <code>./secret.sh view</code> to open it… if you have the key.
+The key isn't written down anywhere in here — that'd rather defeat the point — but a careful
+engineer knows where a Mac keeps its secrets. ⚠️ Don't ship secrets in plaintext, kids. 🔐</sub>

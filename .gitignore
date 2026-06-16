@@ -25,12 +25,12 @@ backend/pm_data.db
 # Obsidian settings
 PM-Vault/.obsidian/
 
-# Private/secret notes + tooling — kept fully local, never committed
+# Private notes: the PLAINTEXT and the passphrase never get committed.
+# The encrypted blob (.notes.md.enc) and the secret.sh tool ARE committed on purpose
+# (encrypted-at-rest secret + the easter egg). Key lives in macOS Keychain, not the repo.
 .notes.md
-.notes.md.enc
 .secret*
 .private/
-secret.sh
 
 # Generated demo status reports (runtime artifacts, not source)
 PM-Vault/PM-Agent/Team Status Report *
