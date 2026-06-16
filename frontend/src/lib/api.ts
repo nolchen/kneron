@@ -34,7 +34,7 @@ async function req<T>(path: string, opts?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  health: () => req<{ status: string; cached_repos: string[] }>("/api/health"),
+  health: () => req<{ status: string; cached_repos: string[]; github_configured: boolean }>("/api/health"),
 
   getRepos:  () => req<{ repos: string[] }>("/api/repos"),
   setRepos:  (repos: string[]) => req<{ repos: string[] }>("/api/repos", { method: "POST", body: JSON.stringify({ repos }) }),

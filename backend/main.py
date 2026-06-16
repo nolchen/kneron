@@ -249,7 +249,11 @@ def load_mock():
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "cached_repos": db.get_meta("repos", [])}
+    return {
+        "status": "ok",
+        "cached_repos": db.get_meta("repos", []),
+        "github_configured": bool(os.environ.get("GITHUB_TOKEN")),
+    }
 
 
 @app.get("/api/repos")

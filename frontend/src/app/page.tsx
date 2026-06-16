@@ -64,6 +64,7 @@ export default function DashboardPage() {
   const [loading, setLoading]   = useState(true);
   const [syncing, setSyncing]   = useState(false);
   const [hasData, setHasData]   = useState(false);
+  const [githubConfigured, setGithubConfigured] = useState(false);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [dismissed, setDismissed] = useState<string[]>([]);
 
@@ -84,6 +85,7 @@ export default function DashboardPage() {
       try {
         const health = await api.health();
         setRepos(health.cached_repos);
+        setGithubConfigured(health.github_configured);
         if (health.cached_repos.length) await loadData();
       } finally { setLoading(false); }
     };
@@ -171,7 +173,7 @@ export default function DashboardPage() {
             className="flex items-center gap-2 rounded-lg border border-brand-purple/40 bg-brand-purple/10 px-4 py-2 text-sm font-medium text-brand-purple hover:bg-brand-purple/20 shadow-sm">
             <BookOpen className="h-4 w-4" /> Open in Obsidian
           </a>
-          {hasData && (
+          {hasData && githubConfigured && (
             <button onClick={handleResync} disabled={syncing}
               className="flex items-center gap-2 rounded-lg border border-ui-border bg-surface px-4 py-2 text-sm font-medium text-text-1 hover:bg-subtle shadow-sm disabled:opacity-50">
               <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} /> Resync
