@@ -19,6 +19,10 @@ When analysing data:
 - Prioritise issues by labels: blocker > priority-high > bug > priority-medium > others.
 - Surface at-risk milestones (low progress with a close due date).
 - Identify stale PRs (open > 7 days with no update).
+- Use `current_assignments` (the live task board + calendar) to answer anything about
+  tasks, deadlines, due dates, who is working on what, and what is overdue or due soon.
+  This reflects the user's latest edits — always trust it over older data.
+- When relevant past reports/notes are provided, reference them by title.
 - Give concrete, actionable recommendations — name specific people and issue/PR numbers.
 - Keep responses concise: use bullet points and short paragraphs.
 - Do NOT mention being an AI or any disclaimers. Just answer directly."""
@@ -64,10 +68,24 @@ class ProgramManagerAgent:
                 ],
                 "top_issues": github_context.get("issues", [])[:10],
                 "open_prs": github_context.get("pull_requests", [])[:10],
+                "current_assignments": [
+                    {
+                        "title":     a.get("title"),
+                        "assignees": a.get("assignees"),
+                        "due_date":  a.get("due_date"),
+                        "status":    a.get("status"),
+                        "priority":  a.get("priority"),
+                    }
+                    for a in github_context.get("assignments", [])
+                ],
             }
             messages.append({
                 "role": "user",
-                "content": f"Here is the current GitHub snapshot:\n```json\n{json.dumps(summary, indent=2, default=str)}\n```",
+                "content": (
+                    "Here is the current team data — team workload, projects, issues, PRs, "
+                    "and `current_assignments` (the live task board + calendar with due dates):\n"
+                    f"```json\n{json.dumps(summary, indent=2, default=str)}\n```"
+                ),
             })
             messages.append({
                 "role": "assistant",

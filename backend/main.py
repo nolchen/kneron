@@ -112,11 +112,17 @@ def _data_snapshot() -> Optional[dict]:
 
 
 def _full_data() -> Optional[dict]:
-    """Assemble the complete data dict (team from DB + snapshot) for AI context / dashboards."""
+    """Assemble the complete data dict (team + live assignment board + snapshot)
+    for AI context / dashboards. Assignments are included so the AI sees the
+    current board and calendar — not just the static issue snapshot."""
     snap = _data_snapshot()
     if snap is None:
         return None
-    return {"team_members": _team_with_workload(), **snap}
+    return {
+        "team_members": _team_with_workload(),
+        "assignments":  db.get_assignments(),
+        **snap,
+    }
 
 
 def _require_data():
@@ -205,6 +211,19 @@ def startup():
         print("[startup] Fresh DB — demo data seeded.")
     else:
         print("[startup] Existing data found — loaded from database.")
+
+    # Best-effort: index Obsidian vault notes so the AI chat can reference them.
+    # ChromaDB is ephemeral on some hosts, so re-index on each boot.
+    try:
+        existing = {n["title"] for n in _notes.list_all()}
+        indexed = 0
+        for vn in scan_vault():
+            if vn["title"] not in existing:
+                _notes.save(title=vn["title"], content=vn["content"], note_type=vn.get("type", "note"))
+                indexed += 1
+        print(f"[startup] Vault indexed: {indexed} new note(s).")
+    except Exception as e:
+        print(f"[startup] Vault index skipped: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -457,11 +476,24 @@ def get_summary():
 def _chat_context(req: ChatRequest):
     github_context = _full_data() if req.include_github else None
     history = [{"role": m.role, "content": m.content} for m in req.history] if req.history else None
-    # RAG: search past notes for anything relevant to the question
+    # RAG: search past notes for anything relevant to the question...
     try:
         notes_context = _notes.search(req.message, n=3)
     except Exception:
         notes_context = []
+    # ...then always fold in the most recent reports/notes, so the AI references
+    # past Obsidian reports even when semantic search finds nothing (or embeddings
+    # are unavailable). Dedupe by title, cap the total.
+    try:
+        recent = _notes.list_all()[:3]
+    except Exception:
+        recent = []
+    seen = {n["title"] for n in notes_context}
+    for n in recent:
+        if n["title"] not in seen:
+            notes_context.append(n)
+            seen.add(n["title"])
+    notes_context = notes_context[:5]
     return github_context, history, notes_context
 
 
