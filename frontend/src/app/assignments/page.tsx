@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { Assignment, TeamMember } from "@/lib/types";
+import { useAuth, canManage } from "@/lib/auth";
 import { formatName, initials } from "@/lib/utils";
 import {
   Plus, Trash2, Pencil, X, RefreshCw,
@@ -103,9 +104,9 @@ function WorkerPicker({
 // ---------------------------------------------------------------------------
 // Unassigned card
 // ---------------------------------------------------------------------------
-function UnassignedCard({ a, team, onAssign, onEdit, onDelete, deleting }: {
+function UnassignedCard({ a, team, onAssign, onEdit, onDelete, deleting, canManage }: {
   a: Assignment; team: TeamMember[];
-  onAssign: (l: string[]) => void; onEdit: () => void; onDelete: () => void; deleting: boolean;
+  onAssign: (l: string[]) => void; onEdit: () => void; onDelete: () => void; deleting: boolean; canManage: boolean;
 }) {
   const [picker, setPicker] = useState(false);
   const pc = PRIORITY_CFG[a.priority] ?? PRIORITY_CFG.medium;
@@ -113,25 +114,29 @@ function UnassignedCard({ a, team, onAssign, onEdit, onDelete, deleting }: {
 
   return (
     <div className="group relative bg-surface border border-ui-border rounded-xl p-4 shadow-sm hover:border-brand-purple/30 transition-all">
-      <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button onClick={onEdit} className="p-1 rounded hover:bg-brand-light"><Pencil className="h-3 w-3 text-text-2" /></button>
-        <button onClick={onDelete} disabled={deleting} className="p-1 rounded hover:bg-red-50">
-          {deleting ? <RefreshCw className="h-3 w-3 animate-spin text-red-400" /> : <Trash2 className="h-3 w-3 text-red-400" />}
-        </button>
-      </div>
+      {canManage && (
+        <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button onClick={onEdit} className="p-1 rounded hover:bg-brand-light"><Pencil className="h-3 w-3 text-text-2" /></button>
+          <button onClick={onDelete} disabled={deleting} className="p-1 rounded hover:bg-red-50">
+            {deleting ? <RefreshCw className="h-3 w-3 animate-spin text-red-400" /> : <Trash2 className="h-3 w-3 text-red-400" />}
+          </button>
+        </div>
+      )}
       <p className="text-sm font-semibold text-text-1 pr-14 mb-2 leading-snug">{a.title}</p>
       <div className="flex items-center gap-2 mb-3">
         <span className={`text-xs border rounded-full px-2 py-0.5 ${pc.cls}`}>{pc.label}</span>
         {dl && <span className={`text-xs flex items-center gap-0.5 ${dl.cls}`}><Calendar className="h-3 w-3" />{dl.text}</span>}
       </div>
       {a.notes && <p className="text-xs text-text-3 mb-3 truncate">{a.notes}</p>}
-      <div className="relative">
-        <button onClick={() => setPicker((p) => !p)}
-          className="flex items-center gap-1.5 text-xs font-semibold text-brand-purple border border-brand-purple/30 rounded-lg px-3 py-1.5 hover:bg-brand-purple/5 w-full justify-center">
-          <UserPlus className="h-3.5 w-3.5" /> Assign People
-        </button>
-        {picker && <WorkerPicker team={team} selected={[]} onDone={onAssign} onClose={() => setPicker(false)} />}
-      </div>
+      {canManage && (
+        <div className="relative">
+          <button onClick={() => setPicker((p) => !p)}
+            className="flex items-center gap-1.5 text-xs font-semibold text-brand-purple border border-brand-purple/30 rounded-lg px-3 py-1.5 hover:bg-brand-purple/5 w-full justify-center">
+            <UserPlus className="h-3.5 w-3.5" /> Assign People
+          </button>
+          {picker && <WorkerPicker team={team} selected={[]} onDone={onAssign} onClose={() => setPicker(false)} />}
+        </div>
+      )}
     </div>
   );
 }
@@ -139,9 +144,9 @@ function UnassignedCard({ a, team, onAssign, onEdit, onDelete, deleting }: {
 // ---------------------------------------------------------------------------
 // Assigned card
 // ---------------------------------------------------------------------------
-function AssignedCard({ a, team, onUpdateAssignees, onEdit, onDelete, deleting }: {
+function AssignedCard({ a, team, onUpdateAssignees, onEdit, onDelete, deleting, canManage }: {
   a: Assignment; team: TeamMember[];
-  onUpdateAssignees: (l: string[]) => void; onEdit: () => void; onDelete: () => void; deleting: boolean;
+  onUpdateAssignees: (l: string[]) => void; onEdit: () => void; onDelete: () => void; deleting: boolean; canManage: boolean;
 }) {
   const [picker, setPicker] = useState(false);
   const pc = PRIORITY_CFG[a.priority] ?? PRIORITY_CFG.medium;
@@ -149,12 +154,14 @@ function AssignedCard({ a, team, onUpdateAssignees, onEdit, onDelete, deleting }
 
   return (
     <div className="group relative bg-surface border border-brand-purple/20 rounded-xl p-4 shadow-sm hover:border-brand-purple/50 transition-all">
-      <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button onClick={onEdit} className="p-1 rounded hover:bg-brand-light"><Pencil className="h-3 w-3 text-text-2" /></button>
-        <button onClick={onDelete} disabled={deleting} className="p-1 rounded hover:bg-red-50">
-          {deleting ? <RefreshCw className="h-3 w-3 animate-spin text-red-400" /> : <Trash2 className="h-3 w-3 text-red-400" />}
-        </button>
-      </div>
+      {canManage && (
+        <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button onClick={onEdit} className="p-1 rounded hover:bg-brand-light"><Pencil className="h-3 w-3 text-text-2" /></button>
+          <button onClick={onDelete} disabled={deleting} className="p-1 rounded hover:bg-red-50">
+            {deleting ? <RefreshCw className="h-3 w-3 animate-spin text-red-400" /> : <Trash2 className="h-3 w-3 text-red-400" />}
+          </button>
+        </div>
+      )}
       <p className="text-sm font-semibold text-text-1 pr-14 mb-2 leading-snug">{a.title}</p>
       <div className="flex items-center gap-2 mb-3">
         <span className={`text-xs border rounded-full px-2 py-0.5 ${pc.cls}`}>{pc.label}</span>
@@ -164,14 +171,16 @@ function AssignedCard({ a, team, onUpdateAssignees, onEdit, onDelete, deleting }
       {/* Assigned people */}
       <div className="relative flex items-center justify-between bg-brand-purple/5 rounded-lg px-3 py-2">
         <AvatarStack logins={a.assignees} />
-        <div className="flex items-center gap-1 ml-2">
-          <button onClick={() => setPicker((p) => !p)} className="p-1 rounded hover:bg-brand-purple/10 text-brand-purple/60 hover:text-brand-purple" title="Edit assignees">
-            <UserPlus className="h-3.5 w-3.5" />
-          </button>
-          <button onClick={() => onUpdateAssignees([])} className="p-1 rounded hover:bg-red-50 text-brand-purple/40 hover:text-red-400" title="Remove all">
-            <UserMinus className="h-3.5 w-3.5" />
-          </button>
-        </div>
+        {canManage && (
+          <div className="flex items-center gap-1 ml-2">
+            <button onClick={() => setPicker((p) => !p)} className="p-1 rounded hover:bg-brand-purple/10 text-brand-purple/60 hover:text-brand-purple" title="Edit assignees">
+              <UserPlus className="h-3.5 w-3.5" />
+            </button>
+            <button onClick={() => onUpdateAssignees([])} className="p-1 rounded hover:bg-red-50 text-brand-purple/40 hover:text-red-400" title="Remove all">
+              <UserMinus className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
         {picker && <WorkerPicker team={team} selected={a.assignees} onDone={onUpdateAssignees} onClose={() => setPicker(false)} />}
       </div>
       {a.assignees.length > 0 && (
@@ -291,6 +300,8 @@ function ColHeader({ icon, label, count, border }: { icon: React.ReactNode; labe
 // Page
 // ---------------------------------------------------------------------------
 export default function AssignmentsPage() {
+  const { user, enforced } = useAuth();
+  const manage = canManage(user, enforced);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [team, setTeam]               = useState<TeamMember[]>([]);
   const [panel, setPanel]             = useState<"new" | Assignment | null>(null);
@@ -350,11 +361,16 @@ export default function AssignmentsPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-text-1">Assignments</h1>
-            <p className="text-sm text-text-2 mt-1">{unassigned.length} unassigned · {inProgress.length} in progress · {available.length} available</p>
+            <p className="text-sm text-text-2 mt-1">
+              {unassigned.length} unassigned · {inProgress.length} in progress · {available.length} available
+              {!manage && <span className="ml-2 text-text-3">· view only</span>}
+            </p>
           </div>
-          <button onClick={() => setPanel("new")} className="flex items-center gap-2 rounded-lg bg-brand-purple px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
-            <Plus className="h-4 w-4" /> New Assignment
-          </button>
+          {manage && (
+            <button onClick={() => setPanel("new")} className="flex items-center gap-2 rounded-lg bg-brand-purple px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
+              <Plus className="h-4 w-4" /> New Assignment
+            </button>
+          )}
         </div>
 
         <div className="grid grid-cols-3 gap-5">
@@ -362,13 +378,15 @@ export default function AssignmentsPage() {
           <div className="flex flex-col gap-3">
             <ColHeader icon={<Circle className="h-4 w-4 text-text-2" />} label="Needs to Start" count={unassigned.length} border="border-brand-dark/20" />
             {unassigned.map((a) => (
-              <UnassignedCard key={a.id} a={a} team={team}
+              <UnassignedCard key={a.id} a={a} team={team} canManage={manage}
                 onAssign={(l) => handleAssign(a.id, l)}
                 onEdit={() => setPanel(a)} onDelete={() => handleDelete(a.id)} deleting={deleting === a.id} />
             ))}
-            <button onClick={() => setPanel("new")} className="flex items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-ui-border py-3 text-xs font-medium text-text-3 hover:border-brand-purple/30 hover:text-brand-purple transition-colors">
-              <Plus className="h-3.5 w-3.5" /> Add assignment
-            </button>
+            {manage && (
+              <button onClick={() => setPanel("new")} className="flex items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-ui-border py-3 text-xs font-medium text-text-3 hover:border-brand-purple/30 hover:text-brand-purple transition-colors">
+                <Plus className="h-3.5 w-3.5" /> Add assignment
+              </button>
+            )}
           </div>
 
           {/* Col 2 */}
@@ -382,7 +400,7 @@ export default function AssignmentsPage() {
           <div className="flex flex-col gap-3">
             <ColHeader icon={<Clock className="h-4 w-4 text-brand-purple" />} label="Being Worked On" count={inProgress.length} border="border-brand-purple" />
             {inProgress.map((a) => (
-              <AssignedCard key={a.id} a={a} team={team}
+              <AssignedCard key={a.id} a={a} team={team} canManage={manage}
                 onUpdateAssignees={(l) => handleAssign(a.id, l)}
                 onEdit={() => setPanel(a)} onDelete={() => handleDelete(a.id)} deleting={deleting === a.id} />
             ))}
@@ -407,7 +425,7 @@ export default function AssignmentsPage() {
         )}
       </div>
 
-      {panel && (
+      {panel && manage && (
         <div className="shrink-0 border-l border-ui-border bg-surface p-6 overflow-y-auto flex flex-col" style={{ width: 360 }}>
           <div className="flex items-center justify-between mb-5">
             <h2 className="font-bold text-text-1">{panel === "new" ? "New Assignment" : "Edit Assignment"}</h2>

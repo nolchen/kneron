@@ -1,14 +1,17 @@
-import { TeamMember, Project, Task, Milestone, ChatMessage, SyncResult, Assignment, Note, EmailAccount } from "./types";
+import { TeamMember, Project, Task, Milestone, ChatMessage, SyncResult, Assignment, Note, EmailAccount, User } from "./types";
 
-const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const BASE = API_BASE;
 
+// credentials: "include" sends/receives the session cookie cross-origin (Vercel↔Render).
 async function loadMock() {
-  await fetch(`${BASE}/api/mock`, { method: "POST" });
+  await fetch(`${BASE}/api/mock`, { method: "POST", credentials: "include" });
 }
 
 async function req<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     ...opts,
   });
 
@@ -19,6 +22,7 @@ async function req<T>(path: string, opts?: RequestInit): Promise<T> {
       await loadMock();
       const retry = await fetch(`${BASE}${path}`, {
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         ...opts,
       });
       if (retry.ok) return retry.json();
@@ -89,5 +93,22 @@ export const api = {
     req<{ response: string }>("/api/chat", {
       method: "POST",
       body: JSON.stringify({ message, history, include_github: includeGithub }),
+    }),
+
+  // --- Auth + users ---
+  authMe: () => req<{ user: User | null; configured: boolean; enforced: boolean }>("/api/auth/me"),
+  // Microsoft sign-in is a full-page redirect (OAuth), not a fetch.
+  login: () => { window.location.href = `${BASE}/api/auth/login`; },
+  logout: () => req<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
+  devLogin: (email: string, role: string = "admin", name = "") =>
+    req<{ user: User }>("/api/auth/dev-login", {
+      method: "POST",
+      body: JSON.stringify({ email, name, role }),
+    }),
+  listUsers: () => req<{ users: User[] }>("/api/users"),
+  setUserRole: (email: string, role: string) =>
+    req<User>(`/api/users/${encodeURIComponent(email)}/role`, {
+      method: "PUT",
+      body: JSON.stringify({ role }),
     }),
 };

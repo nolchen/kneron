@@ -8,6 +8,7 @@ import {
   Sun, Moon, BookOpen, Mail,
 } from "lucide-react";
 import { useTheme } from "@/lib/useTheme";
+import AuthBox from "@/components/AuthBox";
 
 const NAV = [
   { href: "/",             label: "Dashboard",    icon: LayoutDashboard },
@@ -62,6 +63,8 @@ export default function Sidebar() {
           {dark ? "Light mode" : "Dark mode"}
         </button>
       </div>
+
+      <AuthBox />
 
       <div className="px-5 py-3 border-t border-white/10 text-xs text-white/25">
         Powered by Hermes Agent

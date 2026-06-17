@@ -73,6 +73,16 @@ export interface ChatMessage {
   content: string;
 }
 
+export type Role = "admin" | "manager" | "intern";
+
+export interface User {
+  email: string;
+  name: string;
+  role: Role;
+  created_at?: string;
+  last_login?: string;
+}
+
 export interface SyncResult {
   synced_repos: string[];
   team_members: number;
