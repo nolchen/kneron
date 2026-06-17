@@ -5,9 +5,10 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, Map, ListOrdered,
   MessageSquare, Bot, CalendarDays, ClipboardList,
-  Sun, Moon, BookOpen, Mail,
+  Sun, Moon, BookOpen, Mail, ShieldCheck,
 } from "lucide-react";
 import { useTheme } from "@/lib/useTheme";
+import { useAuth } from "@/lib/auth";
 import AuthBox from "@/components/AuthBox";
 
 const NAV = [
@@ -25,6 +26,12 @@ const NAV = [
 export default function Sidebar() {
   const path       = usePathname();
   const { dark, toggle } = useTheme();
+  const { user, enforced } = useAuth();
+
+  // Admin nav appears for admins (and in open demo mode, for setup).
+  const nav = (!enforced || user?.role === "admin")
+    ? [...NAV, { href: "/admin", label: "Users & Roles", icon: ShieldCheck }]
+    : NAV;
 
   return (
     <aside className="flex h-screen w-60 shrink-0 flex-col bg-sidebar text-white">
@@ -34,7 +41,7 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex flex-col gap-1 px-3 py-4 flex-1">
-        {NAV.map(({ href, label, icon: Icon }) => {
+        {nav.map(({ href, label, icon: Icon }) => {
           const active = path === href;
           return (
             <Link

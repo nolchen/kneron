@@ -79,6 +79,7 @@ export interface User {
   email: string;
   name: string;
   role: Role;
+  manager_email?: string;
   created_at?: string;
   last_login?: string;
 }

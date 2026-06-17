@@ -111,4 +111,9 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ role }),
     }),
+  setUserManager: (email: string, manager_email: string) =>
+    req<User>(`/api/users/${encodeURIComponent(email)}/manager`, {
+      method: "PUT",
+      body: JSON.stringify({ manager_email }),
+    }),
 };
