@@ -14,18 +14,54 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-# DATA_DIR lets a host mount a persistent volume (so data survives redeploys).
-# Defaults to the backend folder for local dev.
+# Backend selection:
+#   DATABASE_URL set (postgres://…) -> Postgres: persistent, shared, survives
+#                                      redeploys. Use this in production.
+#   otherwise                       -> local SQLite file: zero-config for dev.
+# The SQL below is written ONCE and runs on both — `?` placeholders are
+# translated to `%s` for Postgres, and every upsert uses the portable
+# `ON CONFLICT (...) DO UPDATE` syntax (SQLite 3.24+ and Postgres both support it).
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+_PG = DATABASE_URL.startswith(("postgres://", "postgresql://"))
+
+if _PG:
+    import psycopg
+    from psycopg.rows import dict_row
+
+# DATA_DIR lets a host mount a persistent volume (SQLite mode only).
 _DATA_DIR = Path(os.environ.get("DATA_DIR", Path(__file__).parent))
 _DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = _DATA_DIR / "pm_data.db"
 _lock   = threading.Lock()
 
 
-def _conn():
+class _Conn:
+    """Backend-agnostic wrapper: call sites write SQL with `?` placeholders and
+    use `with _conn() as c: c.execute(...)`. We translate placeholders for
+    Postgres and proxy the context-manager protocol (commit on clean exit)."""
+
+    def __init__(self, raw):
+        self._raw = raw
+
+    def execute(self, sql, params=()):
+        if _PG:
+            sql = sql.replace("?", "%s")
+        return self._raw.execute(sql, params)
+
+    def __enter__(self):
+        self._raw.__enter__()
+        return self
+
+    def __exit__(self, *exc):
+        return self._raw.__exit__(*exc)
+
+
+def _conn() -> "_Conn":
+    if _PG:
+        return _Conn(psycopg.connect(DATABASE_URL, row_factory=dict_row))
     c = sqlite3.connect(DB_PATH, check_same_thread=False)
     c.row_factory = sqlite3.Row
-    return c
+    return _Conn(c)
 
 
 def init_db():
@@ -42,11 +78,14 @@ def init_db():
                 recent_commits INTEGER DEFAULT 0
             )
         """)
-        # Migration: add email column to pre-existing tables (no-op if present)
-        try:
-            c.execute("ALTER TABLE team_members ADD COLUMN email TEXT DEFAULT ''")
-        except Exception:
-            pass
+        # Migration: add email column to pre-existing SQLite tables (no-op if present).
+        # A fresh Postgres DB already has it from CREATE TABLE above, and a failed
+        # ALTER would poison the Postgres transaction — so only attempt on SQLite.
+        if not _PG:
+            try:
+                c.execute("ALTER TABLE team_members ADD COLUMN email TEXT DEFAULT ''")
+            except Exception:
+                pass
         c.execute("""
             CREATE TABLE IF NOT EXISTS assignments (
                 id         TEXT PRIMARY KEY,
@@ -140,8 +179,11 @@ def replace_team_members(members: list[dict]):
         c.execute("DELETE FROM team_members")
         for m in members:
             c.execute(
-                "INSERT OR REPLACE INTO team_members (login, role, email, workload_score, repos_active, open_issues, open_prs, recent_commits) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO team_members (login, role, email, workload_score, repos_active, open_issues, open_prs, recent_commits) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT (login) DO UPDATE SET role=EXCLUDED.role, email=EXCLUDED.email, "
+                "workload_score=EXCLUDED.workload_score, repos_active=EXCLUDED.repos_active, "
+                "open_issues=EXCLUDED.open_issues, open_prs=EXCLUDED.open_prs, recent_commits=EXCLUDED.recent_commits",
                 (m["login"], m.get("role", ""), m.get("email", ""), m.get("workload_score", 0),
                  json.dumps(m.get("repos_active", [])),
                  m.get("open_issues", 0), m.get("open_prs", 0), m.get("recent_commits", 0)),
@@ -222,7 +264,8 @@ def clear_assignments():
 def set_meta(key: str, value):
     with _lock, _conn() as c:
         c.execute(
-            "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+            "INSERT INTO meta (key, value) VALUES (?, ?) "
+            "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
             (key, json.dumps(value)),
         )
 
@@ -239,10 +282,14 @@ def get_meta(key: str, default=None):
 
 def save_email_account(email: str, name: str, refresh_token: str, connected_at: str):
     with _lock, _conn() as c:
+        # On first insert last_synced starts empty; on conflict we update the
+        # token/name but leave last_synced untouched (preserving sync history).
         c.execute(
-            "INSERT OR REPLACE INTO email_accounts (email, name, refresh_token, connected_at, last_synced) "
-            "VALUES (?, ?, ?, ?, COALESCE((SELECT last_synced FROM email_accounts WHERE email = ?), ''))",
-            (email, name, refresh_token, connected_at, email),
+            "INSERT INTO email_accounts (email, name, refresh_token, connected_at, last_synced) "
+            "VALUES (?, ?, ?, ?, '') "
+            "ON CONFLICT (email) DO UPDATE SET name=EXCLUDED.name, "
+            "refresh_token=EXCLUDED.refresh_token, connected_at=EXCLUDED.connected_at",
+            (email, name, refresh_token, connected_at),
         )
 
 
@@ -295,14 +342,13 @@ def upsert_user(email: str, name: str = "", role: str = "intern") -> dict:
     An existing user's role is preserved (change it via set_user_role)."""
     now = datetime.utcnow().isoformat()
     with _lock, _conn() as c:
-        exists = c.execute("SELECT 1 FROM users WHERE email = ?", (email,)).fetchone()
-        if exists:
-            c.execute("UPDATE users SET name = ?, last_login = ? WHERE email = ?", (name, now, email))
-        else:
-            c.execute(
-                "INSERT INTO users (email, name, role, created_at, last_login) VALUES (?, ?, ?, ?, ?)",
-                (email, name, role, now, now),
-            )
+        # Insert new, or refresh name + last_login for an existing user.
+        # On conflict we deliberately leave `role` untouched (change via set_user_role).
+        c.execute(
+            "INSERT INTO users (email, name, role, created_at, last_login) VALUES (?, ?, ?, ?, ?) "
+            "ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name, last_login = EXCLUDED.last_login",
+            (email, name, role, now, now),
+        )
     return get_user(email)
 
 

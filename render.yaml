@@ -18,3 +18,5 @@ services:
         value: none
       - key: ALLOWED_ORIGINS     # your Vercel URL, e.g. https://your-app.vercel.app
         sync: false
+      - key: DATABASE_URL        # Postgres conn string (Neon/Supabase) for persistent data; blank = ephemeral SQLite
+        sync: false
