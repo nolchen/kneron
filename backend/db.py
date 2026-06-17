@@ -11,6 +11,7 @@ import json
 import os
 import sqlite3
 import threading
+from datetime import datetime
 from pathlib import Path
 
 # DATA_DIR lets a host mount a persistent volume (so data survives redeploys).
@@ -71,6 +72,17 @@ def init_db():
                 refresh_token TEXT,
                 connected_at  TEXT,
                 last_synced   TEXT DEFAULT ''
+            )
+        """)
+        # App users + their permission level (admin | manager | intern).
+        # Populated on Microsoft SSO login; role gates what each person can do.
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                email      TEXT PRIMARY KEY,
+                name       TEXT DEFAULT '',
+                role       TEXT DEFAULT 'intern',
+                created_at TEXT,
+                last_login TEXT DEFAULT ''
             )
         """)
 
@@ -261,3 +273,50 @@ def delete_email_account(email: str) -> bool:
     with _lock, _conn() as c:
         cur = c.execute("DELETE FROM email_accounts WHERE email = ?", (email,))
         return cur.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# App users + roles (admin | manager | intern)
+# ---------------------------------------------------------------------------
+
+def get_user(email: str) -> dict | None:
+    with _lock, _conn() as c:
+        r = c.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+    return dict(r) if r else None
+
+
+def count_users() -> int:
+    with _lock, _conn() as c:
+        return c.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"]
+
+
+def upsert_user(email: str, name: str = "", role: str = "intern") -> dict:
+    """Insert a user, or refresh name + last_login for an existing one.
+    An existing user's role is preserved (change it via set_user_role)."""
+    now = datetime.utcnow().isoformat()
+    with _lock, _conn() as c:
+        exists = c.execute("SELECT 1 FROM users WHERE email = ?", (email,)).fetchone()
+        if exists:
+            c.execute("UPDATE users SET name = ?, last_login = ? WHERE email = ?", (name, now, email))
+        else:
+            c.execute(
+                "INSERT INTO users (email, name, role, created_at, last_login) VALUES (?, ?, ?, ?, ?)",
+                (email, name, role, now, now),
+            )
+    return get_user(email)
+
+
+def set_user_role(email: str, role: str) -> dict | None:
+    with _lock, _conn() as c:
+        cur = c.execute("UPDATE users SET role = ? WHERE email = ?", (role, email))
+        if cur.rowcount == 0:
+            return None
+    return get_user(email)
+
+
+def list_users() -> list[dict]:
+    with _lock, _conn() as c:
+        rows = c.execute(
+            "SELECT email, name, role, created_at, last_login FROM users ORDER BY role, email"
+        ).fetchall()
+    return [dict(r) for r in rows]

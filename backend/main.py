@@ -1,13 +1,14 @@
 import json
 import os
+import secrets
 import uuid
 from datetime import datetime, timedelta
 from typing import Optional, List
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, RedirectResponse
+from fastapi.responses import StreamingResponse, RedirectResponse, JSONResponse
 from pydantic import BaseModel
 
 load_dotenv()
@@ -18,6 +19,8 @@ from notes_store import NotesStore
 from vault_client import write_note, scan_vault
 import db
 import email_client
+import auth
+import notifications
 
 _notes = NotesStore()
 
@@ -286,6 +289,92 @@ def set_repos(config: ReposConfig):
     return {"repos": config.repos}
 
 
+# ---------------------------------------------------------------------------
+# Auth (Microsoft SSO) + users / roles
+# ---------------------------------------------------------------------------
+
+@app.get("/api/auth/login")
+def auth_login():
+    """Kick off Microsoft sign-in; redirects the browser to Microsoft."""
+    if not auth.is_configured():
+        raise HTTPException(400, "Microsoft sign-in is not configured (set MS_CLIENT_ID / MS_CLIENT_SECRET).")
+    return RedirectResponse(auth.login_url(secrets.token_urlsafe(16)))
+
+
+@app.get("/api/auth/callback")
+def auth_callback(code: str = "", state: str = ""):
+    """Microsoft redirects here after sign-in. Establish a session, then send
+    the user back to the frontend."""
+    if not code:
+        raise HTTPException(400, "Missing authorization code")
+    try:
+        info = auth.exchange_code(code)
+    except Exception as e:
+        raise HTTPException(400, f"Login failed: {e}")
+    user = auth.login_user(info["email"], info["name"])
+    token = auth.make_session_token(user["email"])
+    resp = RedirectResponse(os.environ.get("FRONTEND_URL", "http://localhost:3000"))
+    resp.set_cookie(auth.SESSION_COOKIE, token, **auth.cookie_kwargs())
+    return resp
+
+
+@app.get("/api/auth/me")
+def auth_me(request: Request):
+    """Who am I? Drives the frontend's login state."""
+    return {
+        "user": auth.current_user(request),
+        "configured": auth.is_configured(),
+        "enforced": auth.auth_enforced(),
+    }
+
+
+@app.post("/api/auth/logout")
+def auth_logout():
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie(auth.SESSION_COOKIE, path="/")
+    return resp
+
+
+class DevLogin(BaseModel):
+    email: str
+    name: str = ""
+    role: str = "admin"  # admin | manager | intern
+
+
+@app.post("/api/auth/dev-login")
+def auth_dev_login(body: DevLogin):
+    """Local-only shortcut to get a session without Microsoft. Disabled once SSO
+    is configured AND enforced, so it can't be used to bypass real auth in prod."""
+    if auth.is_configured() and auth.auth_enforced():
+        raise HTTPException(403, "Dev login is disabled when SSO is configured and enforced.")
+    if body.role not in auth.ROLES:
+        raise HTTPException(400, f"role must be one of {auth.ROLES}")
+    user = db.upsert_user(email=body.email.strip().lower(), name=body.name or body.email, role=body.role)
+    token = auth.make_session_token(user["email"])
+    resp = JSONResponse({"user": user})
+    resp.set_cookie(auth.SESSION_COOKIE, token, **auth.cookie_kwargs())
+    return resp
+
+
+@app.get("/api/users")
+def list_users(_: dict = Depends(auth.require_manager)):
+    return {"users": db.list_users()}
+
+
+class RoleUpdate(BaseModel):
+    role: str  # admin | manager | intern
+
+
+@app.put("/api/users/{email}/role")
+def set_user_role(email: str, body: RoleUpdate, _: dict = Depends(auth.require_admin)):
+    if body.role not in auth.ROLES:
+        raise HTTPException(400, f"role must be one of {auth.ROLES}")
+    user = db.set_user_role(email.strip().lower(), body.role)
+    if user is None:
+        raise HTTPException(404, "User not found")
+    return user
+
+
 @app.post("/api/sync")
 def sync(config: Optional[ReposConfig] = None):
     repos = (config.repos if config else None) or db.get_meta("repos", [])
@@ -388,19 +477,31 @@ def get_assignments():
     return {"assignments": db.get_assignments()}
 
 
+def _notify_assignees(assignees: List[str], subject: str, message: str):
+    """Best-effort ping to each assigned person, looked up via their team email."""
+    by_login = {m["login"]: m for m in db.get_team_members()}
+    for login in assignees:
+        m = by_login.get(login)
+        if m and m.get("email"):
+            notifications.notify({"email": m["email"], "name": login}, subject, message)
+
+
 @app.post("/api/assignments")
-def create_assignment(body: AssignmentBody):
+def create_assignment(body: AssignmentBody, actor: dict = Depends(auth.require_manager)):
     a = {
         "id": str(uuid.uuid4()),
         "created_at": datetime.utcnow().isoformat(),
         **body.model_dump(),
     }
     db.add_assignment(a)
+    if a["assignees"]:
+        _notify_assignees(a["assignees"], "New task assigned",
+                          f"{a['title']} — due {a.get('due_date') or 'TBD'} ({a.get('priority')} priority)")
     return a
 
 
 @app.put("/api/assignments/{aid}")
-def update_assignment(aid: str, body: AssignmentBody):
+def update_assignment(aid: str, body: AssignmentBody, actor: dict = Depends(auth.require_manager)):
     updated = db.update_assignment(aid, body.model_dump())
     if updated is None:
         raise HTTPException(404, "Assignment not found")
@@ -411,7 +512,7 @@ class AssignWorkers(BaseModel):
     assignees: List[str]  # list of logins; empty list = unassign all
 
 @app.patch("/api/assignments/{aid}/assign")
-def assign_workers(aid: str, body: AssignWorkers):
+def assign_workers(aid: str, body: AssignWorkers, actor: dict = Depends(auth.require_manager)):
     a = db.get_assignment(aid)
     if a is None:
         raise HTTPException(404, "Assignment not found")
@@ -421,11 +522,16 @@ def assign_workers(aid: str, body: AssignWorkers):
         fields["status"] = "in-progress"
     elif not body.assignees and a.get("status") == "in-progress":
         fields["status"] = "todo"
-    return db.update_assignment(aid, fields)
+    updated = db.update_assignment(aid, fields)
+    newly_added = [x for x in body.assignees if x not in a.get("assignees", [])]
+    if newly_added:
+        _notify_assignees(newly_added, "Task assigned to you",
+                          f"{a['title']} — due {a.get('due_date') or 'TBD'}")
+    return updated
 
 
 @app.delete("/api/assignments/{aid}")
-def delete_assignment(aid: str):
+def delete_assignment(aid: str, actor: dict = Depends(auth.require_manager)):
     if not db.delete_assignment(aid):
         raise HTTPException(404, "Assignment not found")
     return {"deleted": aid}

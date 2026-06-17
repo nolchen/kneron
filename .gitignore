@@ -18,6 +18,10 @@ hermes-agent/
 __pycache__/
 *.pyc
 
+# IDE
+.idea/
+.vscode/
+
 # Local databases (per-deployment data, not source)
 backend/notes_db/
 backend/pm_data.db
