@@ -117,13 +117,20 @@ def init_db():
         # Populated on Microsoft SSO login; role gates what each person can do.
         c.execute("""
             CREATE TABLE IF NOT EXISTS users (
-                email      TEXT PRIMARY KEY,
-                name       TEXT DEFAULT '',
-                role       TEXT DEFAULT 'intern',
-                created_at TEXT,
-                last_login TEXT DEFAULT ''
+                email         TEXT PRIMARY KEY,
+                name          TEXT DEFAULT '',
+                role          TEXT DEFAULT 'intern',
+                manager_email TEXT DEFAULT '',
+                created_at    TEXT,
+                last_login    TEXT DEFAULT ''
             )
         """)
+        # Migration: add manager_email to pre-existing SQLite users tables.
+        if not _PG:
+            try:
+                c.execute("ALTER TABLE users ADD COLUMN manager_email TEXT DEFAULT ''")
+            except Exception:
+                pass
 
 
 # ---------------------------------------------------------------------------
@@ -360,9 +367,17 @@ def set_user_role(email: str, role: str) -> dict | None:
     return get_user(email)
 
 
+def set_user_manager(email: str, manager_email: str) -> dict | None:
+    with _lock, _conn() as c:
+        cur = c.execute("UPDATE users SET manager_email = ? WHERE email = ?", (manager_email, email))
+        if cur.rowcount == 0:
+            return None
+    return get_user(email)
+
+
 def list_users() -> list[dict]:
     with _lock, _conn() as c:
         rows = c.execute(
-            "SELECT email, name, role, created_at, last_login FROM users ORDER BY role, email"
+            "SELECT email, name, role, manager_email, created_at, last_login FROM users ORDER BY role, email"
         ).fetchall()
     return [dict(r) for r in rows]

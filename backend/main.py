@@ -21,6 +21,7 @@ import db
 import email_client
 import auth
 import notifications
+import visibility
 
 _notes = NotesStore()
 
@@ -126,6 +127,21 @@ def _full_data() -> Optional[dict]:
         "assignments":  db.get_assignments(),
         **snap,
     }
+
+
+def _scoped_data(request) -> Optional[dict]:
+    """Like _full_data, but team + assignments are limited to what the requester
+    may see (their visible people). No-op in demo mode / for admins."""
+    data = _full_data()
+    if data is None:
+        return None
+    vis = visibility.scope_for(request)
+    if vis is None:
+        return data
+    scoped = dict(data)
+    scoped["team_members"] = [m for m in data.get("team_members", []) if m["login"] in vis]
+    scoped["assignments"] = [a for a in data.get("assignments", []) if set(a.get("assignees", [])) & vis]
+    return scoped
 
 
 def _require_data():
@@ -375,6 +391,18 @@ def set_user_role(email: str, body: RoleUpdate, _: dict = Depends(auth.require_a
     return user
 
 
+class ManagerUpdate(BaseModel):
+    manager_email: str  # who this person reports to ("" = no manager)
+
+
+@app.put("/api/users/{email}/manager")
+def set_user_manager(email: str, body: ManagerUpdate, _: dict = Depends(auth.require_admin)):
+    user = db.set_user_manager(email.strip().lower(), body.manager_email.strip().lower())
+    if user is None:
+        raise HTTPException(404, "User not found")
+    return user
+
+
 @app.post("/api/sync")
 def sync(config: Optional[ReposConfig] = None):
     repos = (config.repos if config else None) or db.get_meta("repos", [])
@@ -437,10 +465,14 @@ def _team_with_workload() -> list[dict]:
     return members
 
 @app.get("/api/team")
-def get_team():
+def get_team(request: Request):
     if not db.get_team_members() and _data_snapshot() is None:
         raise HTTPException(400, "No data synced yet. POST /api/sync to fetch GitHub data first.")
-    return {"team_members": _team_with_workload()}
+    members = _team_with_workload()
+    vis = visibility.scope_for(request)
+    if vis is not None:
+        members = [m for m in members if m["login"] in vis]
+    return {"team_members": members}
 
 
 @app.post("/api/team/member")
@@ -473,8 +505,17 @@ def remove_member(login: str):
 # ---------------------------------------------------------------------------
 
 @app.get("/api/assignments")
-def get_assignments():
-    return {"assignments": db.get_assignments()}
+def get_assignments(request: Request):
+    items = db.get_assignments()
+    vis = visibility.scope_for(request)
+    if vis is not None:
+        manage = visibility.can_manage(request)
+        # See a task if you're on it; managers also see unassigned tasks they can hand out.
+        items = [
+            a for a in items
+            if (set(a.get("assignees", [])) & vis) or (manage and not a.get("assignees"))
+        ]
+    return {"assignments": items}
 
 
 def _notify_assignees(assignees: List[str], subject: str, message: str):
@@ -572,15 +613,15 @@ def get_priorities():
 
 
 @app.get("/api/summary")
-def get_summary():
+def get_summary(request: Request):
     _require_data()
     agent = _pm()
-    summary = agent.summarize_status(_full_data())
+    summary = agent.summarize_status(_scoped_data(request))
     return {"summary": summary}
 
 
-def _chat_context(req: ChatRequest):
-    github_context = _full_data() if req.include_github else None
+def _chat_context(req: ChatRequest, request: Request):
+    github_context = _scoped_data(request) if req.include_github else None
     history = [{"role": m.role, "content": m.content} for m in req.history] if req.history else None
     # RAG: search past notes for anything relevant to the question...
     try:
@@ -604,9 +645,9 @@ def _chat_context(req: ChatRequest):
 
 
 @app.post("/api/chat")
-def chat(req: ChatRequest):
+def chat(req: ChatRequest, request: Request):
     agent = _pm()
-    github_context, history, notes_context = _chat_context(req)
+    github_context, history, notes_context = _chat_context(req, request)
     response = agent.chat(
         user_message=req.message,
         github_context=github_context,
@@ -617,9 +658,9 @@ def chat(req: ChatRequest):
 
 
 @app.post("/api/chat/stream")
-def chat_stream(req: ChatRequest):
+def chat_stream(req: ChatRequest, request: Request):
     agent = _pm()
-    github_context, history, notes_context = _chat_context(req)
+    github_context, history, notes_context = _chat_context(req, request)
 
     def generate():
         for chunk in agent.stream_chat(
