@@ -9,6 +9,20 @@ from typing import Optional, List, Dict
 from openai import OpenAI
 from llm_config import llm_config
 
+
+def _parse_json_array(text: str) -> List[Dict]:
+    """Pull a JSON array out of an LLM response, tolerating code fences / stray prose."""
+    if not text:
+        return []
+    start, end = text.find("["), text.rfind("]")
+    if start == -1 or end == -1 or end < start:
+        return []
+    try:
+        data = json.loads(text[start : end + 1])
+        return data if isinstance(data, list) else []
+    except (json.JSONDecodeError, ValueError):
+        return []
+
 PM_SYSTEM_PROMPT = """\
 You are an expert AI Program Manager with access to a team's GitHub data. \
 Help engineering teams stay organised, prioritise work, and ship on time.
@@ -155,3 +169,30 @@ class ProgramManagerAgent:
             "sprint health, biggest risks, milestone progress, and team health.",
             github_context=github_data,
         )
+
+    def extract_events(self, emails_text: str, today_iso: str) -> List[Dict]:
+        """Read email text and pull out calendar-worthy events (meetings, deadlines,
+        calls, deliverables). Returns a list of dicts:
+        {title, start, end, attendees, source_subject, confidence}.
+        Datetimes are local ISO strings (no timezone) like '2026-06-20T14:00:00'.
+        Best-effort: returns [] if nothing actionable or the model returns junk."""
+        system = (
+            "You extract calendar events from emails. Today is "
+            f"{today_iso}. Resolve relative dates ('next Tuesday', 'tomorrow 3pm') to "
+            "absolute local datetimes. Only include things that belong on a calendar: "
+            "meetings, calls, deadlines, deliverables, interviews. Ignore newsletters, "
+            "marketing, and vague mentions.\n"
+            "Return ONLY a JSON array (no prose). Each item: "
+            '{"title": str, "start": "YYYY-MM-DDTHH:MM:SS", "end": "YYYY-MM-DDTHH:MM:SS", '
+            '"attendees": [email,...], "source_subject": str, "confidence": 0.0-1.0}. '
+            "If a time is unknown, default to a 1-hour block at 09:00. Return [] if none."
+        )
+        resp = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": f"Emails:\n\n{emails_text}"},
+            ],
+            temperature=0,
+        )
+        return _parse_json_array(resp.choices[0].message.content or "")

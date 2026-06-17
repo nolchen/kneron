@@ -740,3 +740,81 @@ def email_disconnect(email: str):
     if not db.delete_email_account(email):
         raise HTTPException(404, "Account not connected")
     return {"disconnected": email}
+
+
+# ---------------------------------------------------------------------------
+# Email → Calendar (scan inboxes → AI proposes events → write to Outlook)
+# ---------------------------------------------------------------------------
+
+class ProposedEvent(BaseModel):
+    title: str
+    start: str                 # local ISO, e.g. 2026-06-20T14:00:00
+    end: str
+    attendees: List[str] = []
+    source_subject: str = ""
+    body: str = ""
+
+
+class CalendarCreateBody(BaseModel):
+    inbox: str                 # which connected account's calendar to write to
+    events: List[ProposedEvent]
+    timezone: str = "Asia/Taipei"
+
+
+@app.post("/api/email/scan-to-events")
+def scan_emails_to_events():
+    """Scan every connected inbox and have the AI propose calendar events.
+    Returns proposals for review — deliberately does NOT create anything yet."""
+    if not email_client.is_configured():
+        raise HTTPException(400, "Email is not configured.")
+    accounts = db.get_all_email_accounts_full()
+    if not accounts:
+        raise HTTPException(400, "No inboxes connected yet.")
+
+    agent = _pm()
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    proposals, errors = [], []
+    for acct in accounts:
+        try:
+            access   = email_client.refresh_access_token(acct["refresh_token"])
+            messages = email_client.fetch_recent_messages(access, top=20)
+            text = "\n\n".join(
+                f"Subject: {m['subject']}\nFrom: {m['from']}\nReceived: {m['received']}\n{m['preview']}"
+                for m in messages
+            )
+            for ev in agent.extract_events(text, today_iso=today):
+                ev["inbox"] = acct["email"]
+                proposals.append(ev)
+        except Exception as e:
+            errors.append(f"{acct['email']}: {str(e)[:80]}")
+
+    return {"proposed_events": proposals, "accounts": len(accounts), "errors": errors}
+
+
+@app.post("/api/calendar/create")
+def create_calendar_events(body: CalendarCreateBody):
+    """Create the (reviewed) events on the connected account's Microsoft calendar."""
+    if not email_client.is_configured():
+        raise HTTPException(400, "Email is not configured.")
+    acct = db.get_email_account(body.inbox)
+    if not acct or not acct.get("refresh_token"):
+        raise HTTPException(404, f"Inbox '{body.inbox}' is not connected.")
+
+    access = email_client.refresh_access_token(acct["refresh_token"])
+    created, errors = [], []
+    for ev in body.events:
+        try:
+            res = email_client.create_calendar_event(
+                access_token=access,
+                subject=ev.title,
+                start_iso=ev.start,
+                end_iso=ev.end,
+                body=ev.body or f"Created by PM Agent from email: {ev.source_subject}",
+                attendees=ev.attendees,
+                timezone=body.timezone,
+            )
+            created.append(res)
+        except Exception as e:
+            errors.append(f"{ev.title}: {str(e)[:80]}")
+
+    return {"created": created, "errors": errors}

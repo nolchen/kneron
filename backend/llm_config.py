@@ -26,6 +26,15 @@ def llm_config() -> dict:
             "api_key":  os.environ.get("GROQ_API_KEY", ""),
             "model":    os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile"),
         }
+    if provider == "hermes":
+        # Nous Research Hermes — OpenAI-compatible. Set HERMES_BASE_URL to the
+        # endpoint they give you (hosted Nous API, OpenRouter, or self-hosted vLLM).
+        return {
+            "provider": "hermes",
+            "base_url": os.environ.get("HERMES_BASE_URL", ""),     # e.g. https://inference.nousresearch.com/v1
+            "api_key":  os.environ.get("HERMES_API_KEY", ""),      # fill when they hand you the key
+            "model":    os.environ.get("HERMES_MODEL", "Hermes-3-Llama-3.1-70B"),
+        }
     if provider == "openai":
         return {
             "provider": "openai",

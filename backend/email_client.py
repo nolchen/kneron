@@ -15,7 +15,9 @@ import httpx
 import msal
 
 GRAPH = "https://graph.microsoft.com/v1.0"
-SCOPES = ["Mail.Read", "User.Read"]  # offline_access is added automatically by MSAL
+# Mail.Read to scan inboxes; Calendars.ReadWrite to create events on the user's calendar.
+# offline_access is added automatically by MSAL.
+SCOPES = ["Mail.Read", "Calendars.ReadWrite", "User.Read"]
 
 
 def _cfg() -> dict:
@@ -108,3 +110,41 @@ def fetch_recent_messages(access_token: str, top: int = 20) -> list[dict]:
             "preview":  m.get("bodyPreview", ""),
         })
     return out
+
+
+# ---------------------------------------------------------------------------
+# Graph — write calendar events
+# ---------------------------------------------------------------------------
+
+def create_calendar_event(
+    access_token: str,
+    subject: str,
+    start_iso: str,
+    end_iso: str,
+    body: str = "",
+    attendees: list[str] | None = None,
+    timezone: str = "Asia/Taipei",
+) -> dict:
+    """Create an event on the user's Microsoft (Outlook) calendar.
+    start_iso/end_iso are local datetimes like '2026-06-20T14:00:00' interpreted in `timezone`
+    (defaults to Taipei). Returns the created event's id + webLink."""
+    headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+    payload: dict = {
+        "subject": subject,
+        "body":    {"contentType": "HTML", "content": body},
+        "start":   {"dateTime": start_iso, "timeZone": timezone},
+        "end":     {"dateTime": end_iso,   "timeZone": timezone},
+    }
+    if attendees:
+        payload["attendees"] = [
+            {"emailAddress": {"address": a}, "type": "required"} for a in attendees
+        ]
+    r = httpx.post(f"{GRAPH}/me/events", headers=headers, json=payload, timeout=30)
+    r.raise_for_status()
+    e = r.json()
+    return {
+        "id":      e.get("id"),
+        "subject": e.get("subject"),
+        "webLink": e.get("webLink"),
+        "start":   (e.get("start") or {}).get("dateTime"),
+    }
