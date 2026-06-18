@@ -1,7 +1,7 @@
 import os
 import httpx
 from typing import Optional, List, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 GITHUB_API = "https://api.github.com"
 
@@ -69,7 +69,7 @@ class GitHubClient:
 
     def get_recent_commits(self, owner_repo: str, days: int = 7) -> List[Dict]:
         owner, repo = owner_repo.split("/", 1)
-        since = (datetime.utcnow() - timedelta(days=days)).isoformat() + "Z"
+        since = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)).isoformat() + "Z"
         return self._get_all_pages(
             f"/repos/{owner}/{repo}/commits",
             {"since": since},

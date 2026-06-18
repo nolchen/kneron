@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { TeamMember, Project, Assignment } from "@/lib/types";
 import { formatName, obsidianVaultUri } from "@/lib/utils";
 import SetupBanner from "@/components/SetupBanner";
+import GraphPanel from "@/components/GraphPanel";
 
 interface Alert { type: "error" | "warning" | "info"; msg: string; }
 
@@ -238,6 +239,10 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
+          </div>
+
+          <div className="mb-6">
+            <GraphPanel />
           </div>
 
           <div className="rounded-xl bg-surface border border-ui-border p-5 shadow-sm">

@@ -1,8 +1,9 @@
 import json
 import os
+import re
 import secrets
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 
 from dotenv import load_dotenv
@@ -40,6 +41,10 @@ MOCK_TEAM = [
     {"login": "drake_drizzy",     "role": "Frontend Engineer",   "open_issues": 1,  "open_prs": 1, "recent_commits": 2,  "repos_active": ["kneron/mobile-app"], "workload_score": 4.0},
     {"login": "kendrick_llamar",  "role": "Data Engineer",       "open_issues": 1,  "open_prs": 0, "recent_commits": 3,  "repos_active": ["kneron/ml-pipeline"], "workload_score": 2.5},
     {"login": "sandy_eggos",      "role": "QA Engineer",         "open_issues": 0,  "open_prs": 1, "recent_commits": 1,  "repos_active": ["kneron/ml-pipeline"], "workload_score": 2.5},
+    # Free / available — recently rolled off other work, no open assignments.
+    {"login": "joe_mama",         "role": "Frontend Engineer",   "open_issues": 0,  "open_prs": 0, "recent_commits": 0,  "repos_active": ["kneron/mobile-app"], "workload_score": 0.0},
+    {"login": "elon_must",        "role": "Platform Engineer",   "open_issues": 0,  "open_prs": 0, "recent_commits": 0,  "repos_active": ["kneron/backend-api"], "workload_score": 0.0},
+    {"login": "obama",            "role": "ML Engineer",         "open_issues": 0,  "open_prs": 0, "recent_commits": 0,  "repos_active": ["kneron/ml-pipeline"], "workload_score": 0.0},
 ]
 
 MOCK_DATA = {
@@ -78,23 +83,28 @@ MOCK_DATA = {
         },
     ],
     "issues": [
-        {"number": 312, "title": "API gateway crashes under sustained 5k rps load", "url": "#", "state": "open", "labels": ["blocker", "performance"], "assignees": ["nolan_chen"], "created_at": "2026-05-20T10:00:00Z", "updated_at": "2026-05-30T09:00:00Z", "repo": "kneron/backend-api"},
-        {"number": 289, "title": "OAuth token refresh fails after 1hr expiry", "url": "#", "state": "open", "labels": ["bug", "priority-high", "auth"], "assignees": ["julia_aquino"], "created_at": "2026-05-18T08:00:00Z", "updated_at": "2026-05-29T14:00:00Z", "repo": "kneron/backend-api"},
-        {"number": 76,  "title": "App crashes on iOS 17.4 when camera permission denied", "url": "#", "state": "open", "labels": ["bug", "priority-high", "ios"], "assignees": ["bobby_lee"], "created_at": "2026-05-22T11:00:00Z", "updated_at": "2026-05-31T10:00:00Z", "repo": "kneron/mobile-app"},
-        {"number": 301, "title": "Rate limiter doesn't reset correctly on rolling window", "url": "#", "state": "open", "labels": ["bug", "priority-high"], "assignees": ["nolan_chen"], "created_at": "2026-05-25T09:00:00Z", "updated_at": "2026-05-31T08:00:00Z", "repo": "kneron/backend-api"},
-        {"number": 45,  "title": "KL720 inference latency spikes to 30ms on large batches", "url": "#", "state": "open", "labels": ["priority-high", "performance"], "assignees": ["deez_nuts"], "created_at": "2026-05-21T13:00:00Z", "updated_at": "2026-05-28T16:00:00Z", "repo": "kneron/ml-pipeline"},
-        {"number": 88,  "title": "Push notifications silently dropped on Android 14", "url": "#", "state": "open", "labels": ["bug", "priority-medium", "android"], "assignees": ["bobby_lee", "albert_liu"], "created_at": "2026-05-19T15:00:00Z", "updated_at": "2026-05-27T11:00:00Z", "repo": "kneron/mobile-app"},
-        {"number": 315, "title": "Add Prometheus metrics endpoint /metrics", "url": "#", "state": "open", "labels": ["enhancement", "priority-medium", "observability"], "assignees": ["albert_liu"], "created_at": "2026-05-26T10:00:00Z", "updated_at": "2026-05-30T12:00:00Z", "repo": "kneron/backend-api"},
-        {"number": 92,  "title": "Onboarding flow skips step 3 for new Android users", "url": "#", "state": "open", "labels": ["bug", "priority-medium"], "assignees": ["chuddington_chad"], "created_at": "2026-05-24T09:00:00Z", "updated_at": "2026-05-29T10:00:00Z", "repo": "kneron/mobile-app"},
-        {"number": 48,  "title": "Add quantisation support for INT4 models", "url": "#", "state": "open", "labels": ["enhancement", "priority-medium"], "assignees": ["deez_nuts", "jenna_wu"], "created_at": "2026-05-23T14:00:00Z", "updated_at": "2026-05-28T15:00:00Z", "repo": "kneron/ml-pipeline"},
-        {"number": 320, "title": "Write API v2 migration guide for external devs", "url": "#", "state": "open", "labels": ["documentation"], "assignees": ["julia_aquino"], "created_at": "2026-05-27T11:00:00Z", "updated_at": "2026-05-31T09:00:00Z", "repo": "kneron/backend-api"},
+        {"number": 341, "title": "Redis session cache evicts active tokens under memory pressure", "url": "#", "state": "open", "labels": ["blocker", "performance"], "assignees": ["nolan_chen"], "created_at": "2026-06-05T10:00:00Z", "updated_at": "2026-06-16T09:00:00Z", "repo": "kneron/backend-api"},
+        {"number": 298, "title": "Refresh-token rotation breaks SSO for returning users", "url": "#", "state": "open", "labels": ["bug", "priority-high", "auth"], "assignees": ["thomas_train"], "created_at": "2026-06-03T08:00:00Z", "updated_at": "2026-06-15T14:00:00Z", "repo": "kneron/backend-api"},
+        {"number": 103, "title": "Dark mode flickers on cold app launch (Android)", "url": "#", "state": "open", "labels": ["bug", "priority-medium", "android"], "assignees": ["bobby_lee"], "created_at": "2026-06-07T11:00:00Z", "updated_at": "2026-06-17T10:00:00Z", "repo": "kneron/mobile-app"},
+        {"number": 355, "title": "GraphQL N+1 queries slow /dashboard by 4x", "url": "#", "state": "open", "labels": ["bug", "priority-high", "performance"], "assignees": ["julia_aquino"], "created_at": "2026-06-04T09:00:00Z", "updated_at": "2026-06-17T08:00:00Z", "repo": "kneron/backend-api"},
+        {"number": 61,  "title": "INT8 quantised model drops 6% accuracy on KL630", "url": "#", "state": "open", "labels": ["priority-high", "performance"], "assignees": ["deez_nuts"], "created_at": "2026-06-02T13:00:00Z", "updated_at": "2026-06-14T16:00:00Z", "repo": "kneron/ml-pipeline"},
+        {"number": 117, "title": "Deep links open the wrong screen after app update", "url": "#", "state": "open", "labels": ["bug", "priority-medium", "ios"], "assignees": ["chuddington_chad"], "created_at": "2026-06-06T15:00:00Z", "updated_at": "2026-06-13T11:00:00Z", "repo": "kneron/mobile-app"},
+        {"number": 362, "title": "Add structured JSON logging across API services", "url": "#", "state": "open", "labels": ["enhancement", "priority-medium", "observability"], "assignees": ["albert_liu"], "created_at": "2026-06-08T10:00:00Z", "updated_at": "2026-06-16T12:00:00Z", "repo": "kneron/backend-api"},
+        {"number": 71,  "title": "Model export pipeline times out on >500MB checkpoints", "url": "#", "state": "open", "labels": ["bug", "priority-medium"], "assignees": ["jenna_wu", "kendrick_llamar"], "created_at": "2026-06-05T14:00:00Z", "updated_at": "2026-06-15T15:00:00Z", "repo": "kneron/ml-pipeline"},
+        {"number": 129, "title": "Offline mode loses unsynced edits on force-quit", "url": "#", "state": "open", "labels": ["bug", "priority-high"], "assignees": ["alice_zhu", "drake_drizzy"], "created_at": "2026-06-09T09:00:00Z", "updated_at": "2026-06-17T09:00:00Z", "repo": "kneron/mobile-app"},
+        {"number": 368, "title": "Document webhook retry/back-off behaviour for partners", "url": "#", "state": "open", "labels": ["documentation"], "assignees": ["julia_aquino"], "created_at": "2026-06-10T11:00:00Z", "updated_at": "2026-06-16T09:00:00Z", "repo": "kneron/backend-api"},
+        {"number": 74,  "title": "Flaky inference regression tests block the CI nightly", "url": "#", "state": "open", "labels": ["bug", "priority-medium"], "assignees": ["sandy_eggos"], "created_at": "2026-06-07T16:00:00Z", "updated_at": "2026-06-14T07:00:00Z", "repo": "kneron/ml-pipeline"},
+        # Unassigned / open work — up for grabs.
+        {"number": 372, "title": "Stand up staging environment with prod parity", "url": "#", "state": "open", "labels": ["enhancement", "priority-medium"], "assignees": [], "created_at": "2026-06-12T10:00:00Z", "updated_at": "2026-06-16T10:00:00Z", "repo": "kneron/backend-api"},
+        {"number": 134, "title": "Add pull-to-refresh to the activity feed", "url": "#", "state": "open", "labels": ["enhancement", "priority-medium"], "assignees": [], "created_at": "2026-06-11T11:00:00Z", "updated_at": "2026-06-15T11:00:00Z", "repo": "kneron/mobile-app"},
+        {"number": 79,  "title": "Benchmark KL630 vs KL720 throughput for the docs", "url": "#", "state": "open", "labels": ["documentation"], "assignees": [], "created_at": "2026-06-13T14:00:00Z", "updated_at": "2026-06-16T14:00:00Z", "repo": "kneron/ml-pipeline"},
     ],
     "pull_requests": [
-        {"number": 334, "title": "fix: patch rolling-window rate limiter reset logic", "url": "#", "state": "open", "author": "nolan_chen", "assignees": ["julia_aquino"], "created_at": "2026-05-30T10:00:00Z", "updated_at": "2026-05-31T08:00:00Z", "repo": "kneron/backend-api", "draft": False},
-        {"number": 335, "title": "feat: add /metrics Prometheus endpoint", "url": "#", "state": "open", "author": "albert_liu", "assignees": ["nolan_chen"], "created_at": "2026-05-29T14:00:00Z", "updated_at": "2026-05-30T11:00:00Z", "repo": "kneron/backend-api", "draft": False},
-        {"number": 97,  "title": "fix: camera permission crash on iOS 17.4", "url": "#", "state": "open", "author": "bobby_lee", "assignees": ["julia_aquino"], "created_at": "2026-05-31T09:00:00Z", "updated_at": "2026-05-31T10:00:00Z", "repo": "kneron/mobile-app", "draft": False},
-        {"number": 98,  "title": "fix: android push notification delivery", "url": "#", "state": "open", "author": "chuddington_chad", "assignees": ["bobby_lee"], "created_at": "2026-05-28T16:00:00Z", "updated_at": "2026-05-29T09:00:00Z", "repo": "kneron/mobile-app", "draft": True},
-        {"number": 52,  "title": "perf: optimise batch inference loop for KL720", "url": "#", "state": "open", "author": "deez_nuts", "assignees": ["jenna_wu"], "created_at": "2026-05-30T13:00:00Z", "updated_at": "2026-05-31T07:00:00Z", "repo": "kneron/ml-pipeline", "draft": False},
+        {"number": 340, "title": "fix: cap redis session cache with LRU eviction guard", "url": "#", "state": "open", "author": "nolan_chen", "assignees": ["thomas_train"], "created_at": "2026-06-15T10:00:00Z", "updated_at": "2026-06-17T08:00:00Z", "repo": "kneron/backend-api", "draft": False},
+        {"number": 343, "title": "feat: structured JSON logging middleware", "url": "#", "state": "open", "author": "albert_liu", "assignees": ["nolan_chen"], "created_at": "2026-06-14T14:00:00Z", "updated_at": "2026-06-16T11:00:00Z", "repo": "kneron/backend-api", "draft": False},
+        {"number": 104, "title": "fix: dark-mode cold-launch flicker", "url": "#", "state": "open", "author": "bobby_lee", "assignees": ["alice_zhu"], "created_at": "2026-06-16T09:00:00Z", "updated_at": "2026-06-17T10:00:00Z", "repo": "kneron/mobile-app", "draft": False},
+        {"number": 105, "title": "fix: deep-link routing after app update", "url": "#", "state": "open", "author": "chuddington_chad", "assignees": ["bobby_lee"], "created_at": "2026-06-13T16:00:00Z", "updated_at": "2026-06-14T09:00:00Z", "repo": "kneron/mobile-app", "draft": True},
+        {"number": 62,  "title": "perf: recover INT8 accuracy via per-channel calibration", "url": "#", "state": "open", "author": "deez_nuts", "assignees": ["jenna_wu"], "created_at": "2026-06-14T13:00:00Z", "updated_at": "2026-06-15T07:00:00Z", "repo": "kneron/ml-pipeline", "draft": False},
     ],
 }
 
@@ -165,11 +175,15 @@ def _issue_priority(labels: list) -> str:
 def _seed_assignments_from_issues():
     """Turn the mock issues into real assignments so workload is driven by
     visible work — no more phantom workload from a hidden base score."""
-    today = datetime.utcnow()
-    due_offset = {"high": 2, "medium": 7, "low": 14}
+    today = datetime.now(timezone.utc).replace(tzinfo=None)
+    due_offset = {"high": 1, "medium": 6, "low": 12}
+    # Per-issue jitter so due dates are spread out — a few overdue, some this
+    # week, some further out — rather than bunched by priority.
+    jitter = [-3, 2, 5, -1, 1, 4, 0, 3, -2, 7, 1]
     for idx, issue in enumerate(MOCK_DATA["issues"]):
         p = _issue_priority(issue["labels"])
-        due = (today + timedelta(days=due_offset[p] + (idx % 5))).strftime("%Y-%m-%d")
+        days = due_offset[p] + jitter[idx % len(jitter)]
+        due = (today + timedelta(days=days)).strftime("%Y-%m-%d")
         db.add_assignment({
             "id":         str(uuid.uuid4()),
             "created_at": today.isoformat(),
@@ -331,7 +345,7 @@ def auth_callback(code: str = "", state: str = ""):
     # Unified access: sign-in also connects their mailbox + calendar. Stash the
     # refresh token so the AI can scan their inbox / write events on their behalf.
     if info.get("refresh_token"):
-        db.save_email_account(info["email"], info["name"], info["refresh_token"], datetime.utcnow().isoformat())
+        db.save_email_account(info["email"], info["name"], info["refresh_token"], datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
     token = auth.make_session_token(user["email"])
     resp = RedirectResponse(os.environ.get("FRONTEND_URL", "http://localhost:3000"))
     resp.set_cookie(auth.SESSION_COOKIE, token, **auth.cookie_kwargs())
@@ -535,7 +549,7 @@ def _notify_assignees(assignees: List[str], subject: str, message: str):
 def create_assignment(body: AssignmentBody, actor: dict = Depends(auth.require_manager)):
     a = {
         "id": str(uuid.uuid4()),
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         **body.model_dump(),
     }
     db.add_assignment(a)
@@ -624,6 +638,92 @@ def get_summary(request: Request):
     return {"summary": summary}
 
 
+@app.get("/api/graph")
+def get_graph(request: Request):
+    """Knowledge graph for the dashboard: people, projects, tasks and reports as
+    nodes; relationships (assigned-to, works-on, mentioned-in, [[links]]) as edges.
+    Role-scoped — you only see your slice when auth is enforced."""
+    vis = visibility.scope_for(request)              # None = see everyone
+    members = _team_with_workload()
+    if vis is not None:
+        members = [m for m in members if m["login"] in vis]
+    visible = {m["login"] for m in members}
+    snap = _data_snapshot() or {}
+    projects = snap.get("projects", [])
+    try:
+        all_notes = _notes.list_all()
+    except Exception:
+        all_notes = []
+    emails  = [n for n in all_notes if n.get("note_type") == "email"][:12]
+    reports = [n for n in all_notes if n.get("note_type") != "email"][:8]
+    notes   = emails + reports
+
+    nodes, edges = [], []
+    ids, edge_keys = set(), set()
+
+    def node(nid, label, ntype, val=1.0):
+        if nid not in ids:
+            ids.add(nid)
+            nodes.append({"id": nid, "label": label, "type": ntype, "val": round(val, 1)})
+
+    def edge(a, b):
+        if a == b or a not in ids or b not in ids:
+            return
+        key = tuple(sorted((a, b)))
+        if key not in edge_keys:
+            edge_keys.add(key)
+            edges.append({"source": a, "target": b})
+
+    for m in members:
+        node("p:" + m["login"], m["login"], "person", 1 + m.get("workload_score", 0) / 10)
+    for p in projects:
+        node("proj:" + p["repo"], p["repo"].split("/")[-1], "project", 2)
+    for m in members:                                # works-on
+        for repo in m.get("repos_active", []):
+            edge("p:" + m["login"], "proj:" + repo)
+
+    count = 0                                        # assigned-to
+    for a in db.get_assignments():
+        if a.get("status") == "done" or count >= 20:
+            continue
+        if vis is not None and not (set(a.get("assignees", [])) & visible):
+            continue
+        node("t:" + a["id"], a["title"], "task")
+        count += 1
+        for x in a.get("assignees", []):
+            edge("p:" + x, "t:" + a["id"])
+
+    by_addr = {(m.get("email") or "").lower(): m for m in members if m.get("email")}
+    nid_of = lambda n2: ("e:" if n2.get("note_type") == "email" else "n:") + n2["id"]
+
+    def link_people(nid, blob):
+        for addr, m in by_addr.items():              # exact email-address match
+            if addr and addr in blob:
+                edge(nid, "p:" + m["login"])
+        for m in members:                            # name / login mention
+            parts = [w for w in m["login"].lower().replace("_", " ").split() if len(w) > 2]
+            if parts and all(w in blob for w in parts):
+                edge(nid, "p:" + m["login"])
+
+    for n in emails:                                 # emails the agent has read
+        nid = "e:" + n["id"]
+        subj = n.get("title", "").replace("Email: ", "", 1)[:34] or "(email)"
+        node(nid, subj, "email")
+        link_people(nid, (n.get("title", "") + " " + n.get("content", "")).lower())
+
+    for n in reports:                                # reports / notes (Obsidian layer)
+        nid = "n:" + n["id"]
+        node(nid, n["title"][:34], "report")
+        blob = (n.get("title", "") + " " + n.get("content", "")).lower()
+        link_people(nid, blob)
+        for tgt in re.findall(r"\[\[([^\]]+)\]\]", n.get("content", "")):   # [[wikilinks]]
+            for n2 in notes:
+                if n2["id"] != n["id"] and tgt.lower() in n2["title"].lower():
+                    edge(nid, nid_of(n2))
+
+    return {"nodes": nodes, "edges": edges}
+
+
 # ---------------------------------------------------------------------------
 # Personal email → tasks → calendar (for the signed-in user)
 # ---------------------------------------------------------------------------
@@ -674,9 +774,9 @@ def scan_my_inbox(user: dict = Depends(auth.require_user)):
         f"Subject: {m['subject']}\nFrom: {m['from']}\nReceived: {m['received']}\n{m['preview']}"
         for m in messages
     )
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d")
     proposals = _pm().extract_events(emails_text, today)
-    db.set_email_synced(user["email"], datetime.utcnow().isoformat())
+    db.set_email_synced(user["email"], datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
     return {"proposals": proposals, "scanned": len(messages)}
 
 
@@ -717,7 +817,7 @@ def confirm_my_events(body: ConfirmEvents, user: dict = Depends(auth.require_use
                     "priority":   "medium",
                     "status":     "in-progress",
                     "notes":      f"From email: {ev.source_subject}",
-                    "created_at": datetime.utcnow().isoformat(),
+                    "created_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                 })
             results.append({"title": ev.title, "ok": True, "webLink": created.get("webLink")})
         except Exception as e:
@@ -814,7 +914,7 @@ class ReportRequest(BaseModel):
 
 def _report_instruction(req: "ReportRequest", role: str) -> str:
     """Build the report ask — scoped by timeframe and tailored to the role."""
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d")
     scope_txt = SCOPE_LABEL.get(req.scope, "overall")
     if role == "intern":
         focus = (
@@ -843,7 +943,7 @@ def _report_instruction(req: "ReportRequest", role: str) -> str:
 
 
 def _report_title(req: "ReportRequest") -> str:
-    stamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    stamp = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M")
     if req.prompt.strip():
         head = req.prompt.strip()
         head = (head[:48] + "…") if len(head) > 48 else head
@@ -990,7 +1090,7 @@ def email_callback(code: str = "", error: str = "", error_description: str = "")
         db.save_email_account(
             email=tok["email"], name=tok["name"],
             refresh_token=tok["refresh_token"],
-            connected_at=datetime.utcnow().isoformat(),
+            connected_at=datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         )
         return RedirectResponse(f"{FRONTEND_URL}/email?connected={tok['email']}")
     except Exception as e:
@@ -1022,7 +1122,7 @@ def email_sync():
                 )
                 _notes.save(title=title, content=content, note_type="email")
                 total += 1
-            db.set_email_synced(acct["email"], datetime.utcnow().isoformat())
+            db.set_email_synced(acct["email"], datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
         except Exception as e:
             errors.append(f"{acct['email']}: {str(e)[:80]}")
 
@@ -1066,7 +1166,7 @@ def scan_emails_to_events():
         raise HTTPException(400, "No inboxes connected yet.")
 
     agent = _pm()
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d")
     proposals, errors = [], []
     for acct in accounts:
         try:

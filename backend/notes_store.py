@@ -10,7 +10,7 @@ import threading
 import uuid
 import httpx
 import chromadb
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from llm_config import embed_config
@@ -62,7 +62,7 @@ class NotesStore:
         except Exception as e:
             print(f"[notes] Embedding unavailable, saving without semantic search: {e}")
             embedding = _fallback_embedding(content)
-        created   = datetime.utcnow().isoformat()
+        created   = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         with _lock:
             self._collection.add(
                 ids=[note_id],

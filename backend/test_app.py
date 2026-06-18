@@ -46,7 +46,7 @@ def test_team_seeded():
     r = client.get("/api/team")
     assert r.status_code == 200
     members = r.json()["team_members"]
-    assert len(members) == 12
+    assert len(members) == 15
     # sorted by workload descending
     scores = [m["workload_score"] for m in members]
     assert scores == sorted(scores, reverse=True)

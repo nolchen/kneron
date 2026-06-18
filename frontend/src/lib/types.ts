@@ -83,6 +83,10 @@ export interface ProposedEvent {
   add_to_board?: boolean;
 }
 
+export interface GraphNode { id: string; label: string; type: "person" | "project" | "task" | "report" | "email"; val?: number; }
+export interface GraphEdge { source: string; target: string; }
+export interface GraphData { nodes: GraphNode[]; edges: GraphEdge[]; }
+
 export type Role = "admin" | "manager" | "intern";
 
 export interface User {

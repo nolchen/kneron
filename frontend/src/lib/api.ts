@@ -1,4 +1,4 @@
-import { TeamMember, Project, Task, Milestone, ChatMessage, SyncResult, Assignment, Note, EmailAccount, User, ProposedEvent } from "./types";
+import { TeamMember, Project, Task, Milestone, ChatMessage, SyncResult, Assignment, Note, EmailAccount, User, ProposedEvent, GraphData } from "./types";
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const BASE = API_BASE;
@@ -56,6 +56,7 @@ export const api = {
   getRoadmap:    () => req<{ milestones: Milestone[] }>("/api/roadmap"),
   getPriorities: () => req<{ priorities: Task[] }>("/api/priorities"),
   getSummary:    () => req<{ summary: string }>("/api/summary"),
+  getGraph:      () => req<GraphData>("/api/graph"),
 
   addMember: (name: string, role: string, repos: string) =>
     req<TeamMember>("/api/team/member", {

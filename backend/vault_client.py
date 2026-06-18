@@ -7,7 +7,7 @@ Obsidian picks up new files automatically — no plugin or API needed.
 import os
 import re
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 # VAULT_PATH env lets a host point this at a mounted Obsidian vault / volume.
@@ -46,7 +46,7 @@ def _frontmatter(title: str, note_type: str, created: str) -> str:
 def write_note(title: str, content: str, note_type: str = "report") -> Path:
     """Save a note/report as a .md file in the vault's PM-Agent subfolder."""
     _ensure_folder()
-    created  = datetime.utcnow().isoformat()
+    created  = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     filename = _safe_filename(title)
     path     = PM_FOLDER / filename
     body     = _frontmatter(title, note_type, created) + f"# {title}\n\n{content}"

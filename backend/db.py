@@ -11,7 +11,7 @@ import json
 import os
 import sqlite3
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Backend selection:
@@ -347,7 +347,7 @@ def count_users() -> int:
 def upsert_user(email: str, name: str = "", role: str = "intern") -> dict:
     """Insert a user, or refresh name + last_login for an existing one.
     An existing user's role is preserved (change it via set_user_role)."""
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     with _lock, _conn() as c:
         # Insert new, or refresh name + last_login for an existing user.
         # On conflict we deliberately leave `role` untouched (change via set_user_role).
