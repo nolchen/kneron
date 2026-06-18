@@ -14,6 +14,8 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
+import crypto  # encrypt refresh tokens at rest
+
 # Backend selection:
 #   DATABASE_URL set (postgres://…) -> Postgres: persistent, shared, survives
 #                                      redeploys. Use this in production.
@@ -296,7 +298,7 @@ def save_email_account(email: str, name: str, refresh_token: str, connected_at: 
             "VALUES (?, ?, ?, ?, '') "
             "ON CONFLICT (email) DO UPDATE SET name=EXCLUDED.name, "
             "refresh_token=EXCLUDED.refresh_token, connected_at=EXCLUDED.connected_at",
-            (email, name, refresh_token, connected_at),
+            (email, name, crypto.encrypt(refresh_token), connected_at),
         )
 
 
@@ -306,16 +308,22 @@ def list_email_accounts() -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def _decrypt_account(d: dict) -> dict:
+    if d.get("refresh_token"):
+        d["refresh_token"] = crypto.decrypt(d["refresh_token"])
+    return d
+
+
 def get_email_account(email: str) -> dict | None:
     with _lock, _conn() as c:
         r = c.execute("SELECT * FROM email_accounts WHERE email = ?", (email,)).fetchone()
-    return dict(r) if r else None
+    return _decrypt_account(dict(r)) if r else None
 
 
 def get_all_email_accounts_full() -> list[dict]:
     with _lock, _conn() as c:
         rows = c.execute("SELECT * FROM email_accounts").fetchall()
-    return [dict(r) for r in rows]
+    return [_decrypt_account(dict(r)) for r in rows]
 
 
 def set_email_synced(email: str, when: str):
