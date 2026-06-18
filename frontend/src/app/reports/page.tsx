@@ -29,6 +29,8 @@ export default function ReportsPage() {
   const [deleting, setDeleting]     = useState<string | null>(null);
   const [showForm, setShowForm]     = useState(false);
   const [form, setForm]             = useState({ title: "", content: "", note_type: "note" });
+  const [reportPrompt, setReportPrompt] = useState("");
+  const [reportScope, setReportScope]   = useState("all");
 
   const reload = () => api.getNotes().then((r) => setNotes(r.notes));
 
@@ -40,7 +42,12 @@ export default function ReportsPage() {
     setSelected(null);
 
     try {
-      const res = await fetch(`${BASE}/api/notes/generate/stream`, { method: "POST" });
+      const res = await fetch(`${BASE}/api/notes/generate/stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ prompt: reportPrompt, scope: reportScope }),
+      });
       if (!res.ok || !res.body) throw new Error("Stream failed");
 
       const reader  = res.body.getReader();
@@ -123,6 +130,23 @@ export default function ReportsPage() {
         <div className="p-4 border-b border-ui-border">
           <h1 className="text-lg font-bold text-text-1 mb-3">Reports & Notes</h1>
           <div className="flex flex-col gap-2">
+            <input
+              value={reportPrompt}
+              onChange={(e) => setReportPrompt(e.target.value)}
+              placeholder="Ask for anything… e.g. my tasks due this week"
+              className="w-full rounded-lg border border-ui-border bg-surface px-2.5 py-2 text-xs text-text-1 placeholder:text-text-3 focus:outline-none focus:ring-2 focus:ring-brand-purple"
+            />
+            <select
+              value={reportScope}
+              onChange={(e) => setReportScope(e.target.value)}
+              className="w-full rounded-lg border border-ui-border bg-surface px-2.5 py-2 text-xs text-text-2 focus:outline-none focus:ring-2 focus:ring-brand-purple"
+            >
+              <option value="all">Overall</option>
+              <option value="week">This week</option>
+              <option value="month">This month</option>
+              <option value="quarter">This quarter</option>
+              <option value="year">This year</option>
+            </select>
             <button onClick={handleGenerate} disabled={generating}
               className="flex items-center gap-2 rounded-lg bg-brand-purple px-3 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50">
               {generating

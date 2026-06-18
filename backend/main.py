@@ -801,14 +801,66 @@ def save_note(body: NoteCreate):
     return note
 
 
+SCOPE_LABEL = {
+    "week": "this week", "month": "this month", "quarter": "this quarter",
+    "year": "this year", "all": "overall",
+}
+
+
+class ReportRequest(BaseModel):
+    prompt: str = ""        # optional free-text ask ("my tasks due this week", etc.)
+    scope: str = "all"      # week | month | quarter | year | all
+
+
+def _report_instruction(req: "ReportRequest", role: str) -> str:
+    """Build the report ask — scoped by timeframe and tailored to the role."""
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    scope_txt = SCOPE_LABEL.get(req.scope, "overall")
+    if role == "intern":
+        focus = (
+            "Focus on MY tasks and deadlines: what I need to do, what is due soon or "
+            "overdue, and how I should prioritize. Pull from the assignment board (my "
+            "tasks, with due dates synced from my calendar and email)."
+        )
+    elif role in ("manager", "admin"):
+        focus = (
+            "Give a team overview: workload balance, who is overloaded vs. who has "
+            "capacity, at-risk or overdue deadlines, and concrete recommendations for "
+            "how to divvy out or rebalance tasks so the team runs more efficiently."
+        )
+    else:
+        focus = "Summarize current status, the biggest risks, and the top next actions."
+    custom = (
+        f' The reader specifically asked: "{req.prompt.strip()}". Answer that directly.'
+        if req.prompt.strip() else ""
+    )
+    return (
+        f"Today is {today}. Write a focused status report scoped to {scope_txt}. {focus} "
+        f"Use the team data, the live assignment board (tasks + due dates from calendar/email), "
+        f"and milestones provided. Be specific — name people, task titles, and dates. "
+        f"Use clear bullet points.{custom}"
+    )
+
+
+def _report_title(req: "ReportRequest") -> str:
+    stamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    if req.prompt.strip():
+        head = req.prompt.strip()
+        head = (head[:48] + "…") if len(head) > 48 else head
+        return f"{head} — {stamp} UTC"
+    return f"Status report ({SCOPE_LABEL.get(req.scope, 'overall').capitalize()}) — {stamp} UTC"
+
+
 @app.post("/api/notes/generate")
-def generate_and_save():
+def generate_and_save(request: Request, req: Optional[ReportRequest] = None):
     """Non-streaming fallback — prefer /api/notes/generate/stream."""
     _require_data()
-    agent   = _pm()
-    content = agent.summarize_status(_full_data())
-    title   = f"Team Status Report — {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC"
-    note    = _notes.save(title=title, content=content, note_type="report")
+    req = req or ReportRequest()
+    agent = _pm()
+    role = (auth.current_user(request) or {}).get("role") or "admin"
+    content = agent.chat(_report_instruction(req, role), github_context=_scoped_data(request))
+    title = _report_title(req)
+    note = _notes.save(title=title, content=content, note_type="report")
     try:
         write_note(title=title, content=content, note_type="report")
     except Exception as e:
@@ -817,33 +869,23 @@ def generate_and_save():
 
 
 @app.post("/api/notes/generate/stream")
-def generate_and_save_stream():
-    """Stream the report generation live, then save to ChromaDB + Obsidian vault."""
+def generate_and_save_stream(request: Request, req: Optional[ReportRequest] = None):
+    """Stream a prompt-driven, role-aware, scoped report; then save it."""
     _require_data()
+    req = req or ReportRequest()
     agent = _pm()
-    title = f"Team Status Report — {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC"
-
-    # _build_messages slims this down to key stats; pass the full snapshot
-    # so it has the keys it expects (matches /api/chat/stream and /api/summary).
-    data = _full_data()
-
-    prompt = (
-        "Write a concise executive status report (8-10 bullet points) covering: "
-        "team workload and who is overloaded, top risks, milestone progress, "
-        "and the 3 most important actions to take this week. Be specific — use names and numbers."
-    )
+    role = (auth.current_user(request) or {}).get("role") or "admin"
+    title = _report_title(req)
+    data = _scoped_data(request)            # only what this person may see
+    instruction = _report_instruction(req, role)
 
     chunks_collected: list[str] = []
 
     def generate():
-        for chunk in agent.stream_chat(
-            user_message=prompt,
-            github_context=data,
-        ):
+        for chunk in agent.stream_chat(user_message=instruction, github_context=data):
             chunks_collected.append(chunk)
             yield f"data: {json.dumps({'chunk': chunk})}\n\n"
 
-        # Save after streaming completes
         content = "".join(chunks_collected)
         try:
             _notes.save(title=title, content=content, note_type="report")
