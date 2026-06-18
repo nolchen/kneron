@@ -4,7 +4,6 @@ import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { EmailAccount } from "@/lib/types";
-import { formatName } from "@/lib/utils";
 import { Mail, RefreshCw, Plus, Trash2, CheckCircle2, AlertTriangle, Inbox } from "lucide-react";
 
 function EmailInner() {

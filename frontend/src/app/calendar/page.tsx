@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, RefreshCw, Circle } from "lucide-react";
+import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { api } from "@/lib/api";
 import { Milestone, Assignment } from "@/lib/types";
 import { formatName } from "@/lib/utils";

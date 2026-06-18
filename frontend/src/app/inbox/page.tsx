@@ -40,7 +40,11 @@ export default function InboxPage() {
   };
 
   const toggle = (i: number) =>
-    setPicked((prev) => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; });
+    setPicked((prev) => {
+      const n = new Set(prev);
+      if (n.has(i)) n.delete(i); else n.add(i);
+      return n;
+    });
 
   const confirm = async () => {
     const events = proposals.filter((_, i) => picked.has(i));
