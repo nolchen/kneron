@@ -17,6 +17,7 @@ the existing demo keeps working until SSO is wired up and you flip the switch.
 """
 
 import os
+import secrets
 import time
 
 import jwt  # PyJWT
@@ -28,6 +29,7 @@ import db
 ROLES = ("admin", "manager", "intern")
 
 SESSION_COOKIE = "pm_session"
+OAUTH_STATE_COOKIE = "pm_oauth_state"
 _TOKEN_TTL = 60 * 60 * 24 * 7  # 7 days
 # Sign-in is unified with mailbox + calendar access: one Microsoft consent grants
 # identity AND the Graph scopes the AI needs to scan the person's inbox and write
@@ -86,6 +88,24 @@ def login_url(state: str) -> str:
     return _ms_app().get_authorization_request_url(
         LOGIN_SCOPES, state=state, redirect_uri=_redirect_uri(), prompt="select_account"
     )
+
+
+# --- CSRF protection: the `state` param is bound to a short-lived cookie set at
+# login start and verified on callback, so an attacker can't forge a callback. ---
+
+def new_state() -> str:
+    return secrets.token_urlsafe(24)
+
+
+def state_cookie_kwargs() -> dict:
+    # samesite=lax so the cookie survives the top-level GET redirect back from
+    # Microsoft; short max_age since it's only needed for the round-trip.
+    secure = os.environ.get("COOKIE_SECURE", "true").lower() != "false"
+    return {"httponly": True, "secure": secure, "samesite": "lax", "max_age": 600, "path": "/"}
+
+
+def verify_state(received: str, expected: str) -> bool:
+    return bool(received and expected and secrets.compare_digest(received, expected))
 
 
 def exchange_code(code: str) -> dict:

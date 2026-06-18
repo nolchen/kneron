@@ -1,7 +1,6 @@
 import json
 import os
 import re
-import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
@@ -328,13 +327,20 @@ def auth_login():
     """Kick off Microsoft sign-in; redirects the browser to Microsoft."""
     if not auth.is_configured():
         raise HTTPException(400, "Microsoft sign-in is not configured (set MS_CLIENT_ID / MS_CLIENT_SECRET).")
-    return RedirectResponse(auth.login_url(secrets.token_urlsafe(16)))
+    state = auth.new_state()
+    resp = RedirectResponse(auth.login_url(state))
+    # Bind this login attempt to a cookie so the callback can verify it (CSRF).
+    resp.set_cookie(auth.OAUTH_STATE_COOKIE, state, **auth.state_cookie_kwargs())
+    return resp
 
 
 @app.get("/api/auth/callback")
-def auth_callback(code: str = "", state: str = ""):
+def auth_callback(request: Request, code: str = "", state: str = ""):
     """Microsoft redirects here after sign-in. Establish a session, then send
     the user back to the frontend."""
+    # CSRF: the state must match the cookie we set when login began.
+    if not auth.verify_state(state, request.cookies.get(auth.OAUTH_STATE_COOKIE, "")):
+        raise HTTPException(400, "Invalid or expired sign-in state. Please try signing in again.")
     if not code:
         raise HTTPException(400, "Missing authorization code")
     try:
@@ -349,6 +355,7 @@ def auth_callback(code: str = "", state: str = ""):
     token = auth.make_session_token(user["email"])
     resp = RedirectResponse(os.environ.get("FRONTEND_URL", "http://localhost:3000"))
     resp.set_cookie(auth.SESSION_COOKIE, token, **auth.cookie_kwargs())
+    resp.delete_cookie(auth.OAUTH_STATE_COOKIE, path="/")  # one-time use
     return resp
 
 
@@ -1074,15 +1081,20 @@ def email_connect():
     """Return the Microsoft sign-in URL for the user to grant inbox access."""
     if not email_client.is_configured():
         raise HTTPException(400, "Email is not configured. Set MS_CLIENT_ID / MS_CLIENT_SECRET.")
-    url = email_client.auth_url(state="pm-agent")
-    return {"auth_url": url}
+    state = auth.new_state()
+    resp = JSONResponse({"auth_url": email_client.auth_url(state=state)})
+    # Bind to a cookie so the callback can verify (CSRF) — same pattern as login.
+    resp.set_cookie(auth.OAUTH_STATE_COOKIE, state, **auth.state_cookie_kwargs())
+    return resp
 
 
 @app.get("/api/email/callback")
-def email_callback(code: str = "", error: str = "", error_description: str = ""):
+def email_callback(request: Request, code: str = "", state: str = "", error: str = "", error_description: str = ""):
     """Microsoft redirects here after the user signs in. Exchange + store the token."""
     if error:
         return RedirectResponse(f"{FRONTEND_URL}/email?error={error}")
+    if not auth.verify_state(state, request.cookies.get(auth.OAUTH_STATE_COOKIE, "")):
+        return RedirectResponse(f"{FRONTEND_URL}/email?error=invalid_state")
     if not code:
         return RedirectResponse(f"{FRONTEND_URL}/email?error=missing_code")
     try:
@@ -1092,7 +1104,9 @@ def email_callback(code: str = "", error: str = "", error_description: str = "")
             refresh_token=tok["refresh_token"],
             connected_at=datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         )
-        return RedirectResponse(f"{FRONTEND_URL}/email?connected={tok['email']}")
+        resp = RedirectResponse(f"{FRONTEND_URL}/email?connected={tok['email']}")
+        resp.delete_cookie(auth.OAUTH_STATE_COOKIE, path="/")  # one-time use
+        return resp
     except Exception as e:
         return RedirectResponse(f"{FRONTEND_URL}/email?error={str(e)[:100]}")
 
