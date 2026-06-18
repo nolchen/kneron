@@ -29,9 +29,11 @@ ROLES = ("admin", "manager", "intern")
 
 SESSION_COOKIE = "pm_session"
 _TOKEN_TTL = 60 * 60 * 24 * 7  # 7 days
-# Login only needs to identify the person; Graph mail/calendar scopes are granted
-# separately by the email integration. openid/profile/email are added by MSAL.
-LOGIN_SCOPES = ["User.Read"]
+# Sign-in is unified with mailbox + calendar access: one Microsoft consent grants
+# identity AND the Graph scopes the AI needs to scan the person's inbox and write
+# to their calendar. MSAL adds openid/profile/email/offline_access automatically
+# (offline_access is what yields the refresh token we store).
+LOGIN_SCOPES = ["User.Read", "Mail.Read", "Calendars.ReadWrite"]
 
 
 # ---------------------------------------------------------------------------
@@ -87,7 +89,8 @@ def login_url(state: str) -> str:
 
 
 def exchange_code(code: str) -> dict:
-    """Trade the auth code for the signed-in person's email + name."""
+    """Trade the auth code for the person's email + name + a refresh token
+    (the refresh token lets the AI read their inbox / write their calendar later)."""
     res = _ms_app().acquire_token_by_authorization_code(
         code, scopes=LOGIN_SCOPES, redirect_uri=_redirect_uri()
     )
@@ -97,7 +100,11 @@ def exchange_code(code: str) -> dict:
     email = (claims.get("preferred_username") or claims.get("email") or "").lower()
     if not email:
         raise RuntimeError("Could not read an email from the Microsoft account")
-    return {"email": email, "name": claims.get("name", email)}
+    return {
+        "email": email,
+        "name": claims.get("name", email),
+        "refresh_token": res.get("refresh_token", ""),
+    }
 
 
 # ---------------------------------------------------------------------------

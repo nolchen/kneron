@@ -328,6 +328,10 @@ def auth_callback(code: str = "", state: str = ""):
     except Exception as e:
         raise HTTPException(400, f"Login failed: {e}")
     user = auth.login_user(info["email"], info["name"])
+    # Unified access: sign-in also connects their mailbox + calendar. Stash the
+    # refresh token so the AI can scan their inbox / write events on their behalf.
+    if info.get("refresh_token"):
+        db.save_email_account(info["email"], info["name"], info["refresh_token"], datetime.utcnow().isoformat())
     token = auth.make_session_token(user["email"])
     resp = RedirectResponse(os.environ.get("FRONTEND_URL", "http://localhost:3000"))
     resp.set_cookie(auth.SESSION_COOKIE, token, **auth.cookie_kwargs())
@@ -618,6 +622,107 @@ def get_summary(request: Request):
     agent = _pm()
     summary = agent.summarize_status(_scoped_data(request))
     return {"summary": summary}
+
+
+# ---------------------------------------------------------------------------
+# Personal email → tasks → calendar (for the signed-in user)
+# ---------------------------------------------------------------------------
+
+def _login_for_email(email: str) -> Optional[str]:
+    """Map a person's email to their team-member login (for their task board)."""
+    el = (email or "").lower()
+    for m in db.get_team_members():
+        if (m.get("email") or "").lower() == el:
+            return m["login"]
+    return None
+
+
+def _user_access_token(user: dict) -> str:
+    """Fresh Microsoft Graph access token for the signed-in user, from the
+    refresh token captured at login."""
+    acct = db.get_email_account(user["email"])
+    if not acct or not acct.get("refresh_token"):
+        raise HTTPException(400, "Your inbox isn't connected. Sign in with Microsoft to grant mail + calendar access.")
+    try:
+        return email_client.refresh_access_token(acct["refresh_token"])
+    except Exception as e:
+        raise HTTPException(401, f"Microsoft access expired — please sign in again. ({e})")
+
+
+@app.get("/api/me/inbox")
+def my_inbox_status(user: dict = Depends(auth.require_user)):
+    acct = db.get_email_account(user["email"])
+    return {
+        "connected":   bool(acct and acct.get("refresh_token")),
+        "email":       user.get("email", ""),
+        "last_synced": (acct or {}).get("last_synced", ""),
+    }
+
+
+@app.post("/api/me/scan")
+def scan_my_inbox(user: dict = Depends(auth.require_user)):
+    """Read the signed-in user's recent mail and PROPOSE calendar-worthy tasks/
+    events. Writes nothing — the user confirms before anything lands."""
+    token = _user_access_token(user)
+    try:
+        messages = email_client.fetch_recent_messages(token, top=25)
+    except Exception as e:
+        raise HTTPException(502, f"Couldn't read your inbox: {e}")
+    if not messages:
+        return {"proposals": [], "scanned": 0}
+    emails_text = "\n\n".join(
+        f"Subject: {m['subject']}\nFrom: {m['from']}\nReceived: {m['received']}\n{m['preview']}"
+        for m in messages
+    )
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    proposals = _pm().extract_events(emails_text, today)
+    db.set_email_synced(user["email"], datetime.utcnow().isoformat())
+    return {"proposals": proposals, "scanned": len(messages)}
+
+
+class ProposedEvent(BaseModel):
+    title: str
+    start: str                       # 'YYYY-MM-DDTHH:MM:SS'
+    end: str = ""
+    attendees: List[str] = []
+    source_subject: str = ""
+    add_to_board: bool = True        # also create a task on their board
+
+
+class ConfirmEvents(BaseModel):
+    events: List[ProposedEvent]
+
+
+@app.post("/api/me/calendar/confirm")
+def confirm_my_events(body: ConfirmEvents, user: dict = Depends(auth.require_user)):
+    """Write the user-approved events to their Outlook calendar (and optionally
+    mirror them onto their task board)."""
+    token = _user_access_token(user)
+    my_login = _login_for_email(user["email"])
+    results = []
+    for ev in body.events:
+        end = ev.end or ev.start
+        try:
+            created = email_client.create_calendar_event(
+                token, subject=ev.title, start_iso=ev.start, end_iso=end,
+                body=f"Added by PM Agent from email: {ev.source_subject}",
+                attendees=ev.attendees,
+            )
+            if ev.add_to_board and my_login:
+                db.add_assignment({
+                    "id":         str(uuid.uuid4()),
+                    "title":      ev.title,
+                    "assignees":  [my_login],
+                    "due_date":   (ev.start or "")[:10],
+                    "priority":   "medium",
+                    "status":     "in-progress",
+                    "notes":      f"From email: {ev.source_subject}",
+                    "created_at": datetime.utcnow().isoformat(),
+                })
+            results.append({"title": ev.title, "ok": True, "webLink": created.get("webLink")})
+        except Exception as e:
+            results.append({"title": ev.title, "ok": False, "error": str(e)})
+    return {"results": results}
 
 
 def _chat_context(req: ChatRequest, request: Request):

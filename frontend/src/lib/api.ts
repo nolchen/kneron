@@ -1,4 +1,4 @@
-import { TeamMember, Project, Task, Milestone, ChatMessage, SyncResult, Assignment, Note, EmailAccount, User } from "./types";
+import { TeamMember, Project, Task, Milestone, ChatMessage, SyncResult, Assignment, Note, EmailAccount, User, ProposedEvent } from "./types";
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const BASE = API_BASE;
@@ -116,4 +116,13 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ manager_email }),
     }),
+
+  // --- Personal email → tasks → calendar ---
+  inboxStatus: () => req<{ connected: boolean; email: string; last_synced: string }>("/api/me/inbox"),
+  scanInbox: () => req<{ proposals: ProposedEvent[]; scanned: number }>("/api/me/scan", { method: "POST" }),
+  confirmEvents: (events: ProposedEvent[]) =>
+    req<{ results: { title: string; ok: boolean; webLink?: string; error?: string }[] }>(
+      "/api/me/calendar/confirm",
+      { method: "POST", body: JSON.stringify({ events }) },
+    ),
 };

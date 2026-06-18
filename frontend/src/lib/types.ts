@@ -73,6 +73,16 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface ProposedEvent {
+  title: string;
+  start: string;          // 'YYYY-MM-DDTHH:MM:SS'
+  end?: string;
+  attendees?: string[];
+  source_subject?: string;
+  confidence?: number;
+  add_to_board?: boolean;
+}
+
 export type Role = "admin" | "manager" | "intern";
 
 export interface User {
