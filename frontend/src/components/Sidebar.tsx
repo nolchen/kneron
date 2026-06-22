@@ -29,8 +29,8 @@ export default function Sidebar() {
   const { dark, toggle } = useTheme();
   const { user, enforced } = useAuth();
 
-  // Admin nav appears for admins (and in open demo mode, for setup).
-  const nav = (!enforced || user?.role === "admin")
+  // Admin nav appears for L3 (and in open demo mode, for setup).
+  const nav = (!enforced || user?.role === "L3")
     ? [...NAV, { href: "/admin", label: "Users & Roles", icon: ShieldCheck }]
     : NAV;
 

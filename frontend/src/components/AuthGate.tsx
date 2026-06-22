@@ -55,7 +55,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
                 <ShieldCheck className="h-3 w-3" /> Dev sign-in (Microsoft not configured)
               </p>
               <div className="grid grid-cols-3 gap-2">
-                {(["admin", "manager", "intern"] as Role[]).map((r) => (
+                {(["L3", "L2", "L1"] as Role[]).map((r) => (
                   <button
                     key={r}
                     onClick={() => devLogin(r)}

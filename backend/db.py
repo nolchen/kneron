@@ -121,7 +121,7 @@ def init_db():
             CREATE TABLE IF NOT EXISTS users (
                 email         TEXT PRIMARY KEY,
                 name          TEXT DEFAULT '',
-                role          TEXT DEFAULT 'intern',
+                role          TEXT DEFAULT 'L1',
                 manager_email TEXT DEFAULT '',
                 created_at    TEXT,
                 last_login    TEXT DEFAULT ''
@@ -133,6 +133,10 @@ def init_db():
                 c.execute("ALTER TABLE users ADD COLUMN manager_email TEXT DEFAULT ''")
             except Exception:
                 pass
+        # Migration: rename legacy role labels -> tiered levels. Idempotent
+        # (after the first run no rows match). Runs on both SQLite and Postgres.
+        for _old, _new in (("admin", "L3"), ("manager", "L2"), ("intern", "L1")):
+            c.execute("UPDATE users SET role = ? WHERE role = ?", (_new, _old))
 
 
 # ---------------------------------------------------------------------------
@@ -338,7 +342,7 @@ def delete_email_account(email: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# App users + roles (admin | manager | intern)
+# App users + roles (L1 intern | L2 manager | L3 honcho)
 # ---------------------------------------------------------------------------
 
 def get_user(email: str) -> dict | None:
@@ -352,7 +356,7 @@ def count_users() -> int:
         return c.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"]
 
 
-def upsert_user(email: str, name: str = "", role: str = "intern") -> dict:
+def upsert_user(email: str, name: str = "", role: str = "L1") -> dict:
     """Insert a user, or refresh name + last_login for an existing one.
     An existing user's role is preserved (change it via set_user_role)."""
     now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()

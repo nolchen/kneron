@@ -101,7 +101,7 @@ export const api = {
   // Microsoft sign-in is a full-page redirect (OAuth), not a fetch.
   login: () => { window.location.href = `${BASE}/api/auth/login`; },
   logout: () => req<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
-  devLogin: (email: string, role: string = "admin", name = "") =>
+  devLogin: (email: string, role: string = "L3", name = "") =>
     req<{ user: User }>("/api/auth/dev-login", {
       method: "POST",
       body: JSON.stringify({ email, name, role }),

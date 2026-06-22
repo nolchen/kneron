@@ -5,11 +5,11 @@ signed-in user is allowed to see.
 Model: each user has a `manager_email` (their boss). A signed-in user is linked
 to a team member by matching email (users.email == team_members.email).
 
-  admin   -> everyone
-  manager -> themselves + their direct reports (users whose manager is them)
-  intern  -> themselves + peers (other users under the same manager)
+  L3 (honcho)  -> everyone
+  L2 (manager) -> themselves + their direct reports (users whose manager is them)
+  L1 (intern)  -> themselves + peers (other users under the same manager)
 
-A return of None means "no restriction" (see everyone) — used for admins and for
+A return of None means "no restriction" (see everyone) — used for L3 and for
 demo mode (auth not enforced), so the open demo keeps working unchanged.
 """
 
@@ -27,15 +27,15 @@ def _email_to_login() -> dict[str, str]:
 
 
 def visible_emails(user: dict) -> set[str] | None:
-    """Set of user emails this person may see, or None for everyone (admin)."""
+    """Set of user emails this person may see, or None for everyone (L3)."""
     role = user.get("role")
     me = (user.get("email") or "").lower()
-    if role == "admin":
+    if role == "L3":
         return None
 
     users = db.list_users()
     seen = {me}
-    if role == "manager":
+    if role == "L2":
         # self + direct reports
         seen |= {u["email"].lower() for u in users if (u.get("manager_email") or "").lower() == me}
     else:
@@ -70,9 +70,9 @@ def scope_for(request) -> set[str] | None:
 
 
 def can_manage(request) -> bool:
-    """Whether the requester may create/assign/edit tasks (admin or manager).
+    """Whether the requester may create/assign/edit tasks (L2 or L3).
     True in demo mode so the open demo keeps full controls."""
     if not auth.auth_enforced():
         return True
     user = auth.current_user(request)
-    return bool(user and user.get("role") in ("admin", "manager"))
+    return bool(user and user.get("role") in ("L2", "L3"))

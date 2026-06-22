@@ -7,9 +7,9 @@ import { api } from "@/lib/api";
 import { Role } from "@/lib/types";
 
 const ROLE_CLS: Record<Role, string> = {
-  admin:   "bg-brand-purple/20 text-brand-purple",
-  manager: "bg-brand-green/20 text-brand-green",
-  intern:  "bg-white/10 text-white/60",
+  L3: "bg-brand-purple/20 text-brand-purple",
+  L2: "bg-brand-green/20 text-brand-green",
+  L1: "bg-white/10 text-white/60",
 };
 
 function initials(s: string) {
@@ -78,7 +78,7 @@ export default function AuthBox() {
         <ShieldCheck className="h-3 w-3" /> Dev sign-in
       </p>
       <div className="grid grid-cols-3 gap-1.5">
-        {(["admin", "manager", "intern"] as Role[]).map((r) => (
+        {(["L3", "L2", "L1"] as Role[]).map((r) => (
           <button key={r} onClick={() => devLogin(r)} disabled={busy}
             className="text-[11px] capitalize rounded-lg bg-white/10 py-1.5 text-white/70 hover:bg-white/15 hover:text-white transition-colors disabled:opacity-50">
             {r}

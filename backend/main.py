@@ -293,7 +293,7 @@ class AssignmentBody(BaseModel):
 # ---------------------------------------------------------------------------
 
 @app.post("/api/mock")
-def load_mock():
+def load_mock(_: dict = Depends(auth.require_admin)):
     _seed_mock(reset_assignments=True)
     return {"loaded": True, "team_members": len(db.get_team_members())}
 
@@ -313,7 +313,7 @@ def get_repos():
 
 
 @app.post("/api/repos")
-def set_repos(config: ReposConfig):
+def set_repos(config: ReposConfig, _: dict = Depends(auth.require_manager)):
     db.set_meta("repos", config.repos)
     return {"repos": config.repos}
 
@@ -379,7 +379,7 @@ def auth_logout():
 class DevLogin(BaseModel):
     email: str
     name: str = ""
-    role: str = "admin"  # admin | manager | intern
+    role: str = "L3"  # L1 | L2 | L3
 
 
 @app.post("/api/auth/dev-login")
@@ -403,7 +403,7 @@ def list_users(_: dict = Depends(auth.require_manager)):
 
 
 class RoleUpdate(BaseModel):
-    role: str  # admin | manager | intern
+    role: str  # L1 | L2 | L3
 
 
 @app.put("/api/users/{email}/role")
@@ -429,7 +429,7 @@ def set_user_manager(email: str, body: ManagerUpdate, _: dict = Depends(auth.req
 
 
 @app.post("/api/sync")
-def sync(config: Optional[ReposConfig] = None):
+def sync(config: Optional[ReposConfig] = None, _: dict = Depends(auth.require_manager)):
     repos = (config.repos if config else None) or db.get_meta("repos", [])
     if not repos:
         raise HTTPException(400, "No repos configured. POST /api/repos first.")
@@ -501,7 +501,7 @@ def get_team(request: Request):
 
 
 @app.post("/api/team/member")
-def add_member(body: TeamMemberCreate):
+def add_member(body: TeamMemberCreate, _: dict = Depends(auth.require_manager)):
     login = body.name.strip().lower().replace(" ", "_")
     if db.member_exists(login):
         raise HTTPException(400, f"Member '{login}' already exists")
@@ -519,7 +519,7 @@ def add_member(body: TeamMemberCreate):
 
 
 @app.delete("/api/team/member/{login}")
-def remove_member(login: str):
+def remove_member(login: str, _: dict = Depends(auth.require_manager)):
     if not db.delete_team_member(login):
         raise HTTPException(404, "Member not found")
     return {"deleted": login}
@@ -857,7 +857,7 @@ def _chat_context(req: ChatRequest, request: Request):
 
 
 @app.post("/api/chat")
-def chat(req: ChatRequest, request: Request):
+def chat(req: ChatRequest, request: Request, _: dict = Depends(auth.require_user)):
     agent = _pm()
     github_context, history, notes_context = _chat_context(req, request)
     response = agent.chat(
@@ -870,7 +870,7 @@ def chat(req: ChatRequest, request: Request):
 
 
 @app.post("/api/chat/stream")
-def chat_stream(req: ChatRequest, request: Request):
+def chat_stream(req: ChatRequest, request: Request, _: dict = Depends(auth.require_user)):
     agent = _pm()
     github_context, history, notes_context = _chat_context(req, request)
 
@@ -898,12 +898,12 @@ class NoteCreate(BaseModel):
 
 
 @app.get("/api/notes")
-def get_notes():
+def get_notes(_: dict = Depends(auth.require_user)):
     return {"notes": _notes.list_all()}
 
 
 @app.post("/api/notes")
-def save_note(body: NoteCreate):
+def save_note(body: NoteCreate, _: dict = Depends(auth.require_user)):
     note = _notes.save(title=body.title, content=body.content, note_type=body.note_type)
     return note
 
@@ -923,13 +923,13 @@ def _report_instruction(req: "ReportRequest", role: str) -> str:
     """Build the report ask — scoped by timeframe and tailored to the role."""
     today = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d")
     scope_txt = SCOPE_LABEL.get(req.scope, "overall")
-    if role == "intern":
+    if role == "L1":
         focus = (
             "Focus on MY tasks and deadlines: what I need to do, what is due soon or "
             "overdue, and how I should prioritize. Pull from the assignment board (my "
             "tasks, with due dates synced from my calendar and email)."
         )
-    elif role in ("manager", "admin"):
+    elif role in ("L2", "L3"):
         focus = (
             "Give a team overview: workload balance, who is overloaded vs. who has "
             "capacity, at-risk or overdue deadlines, and concrete recommendations for "
@@ -959,12 +959,12 @@ def _report_title(req: "ReportRequest") -> str:
 
 
 @app.post("/api/notes/generate")
-def generate_and_save(request: Request, req: Optional[ReportRequest] = None):
+def generate_and_save(request: Request, req: Optional[ReportRequest] = None, _: dict = Depends(auth.require_user)):
     """Non-streaming fallback — prefer /api/notes/generate/stream."""
     _require_data()
     req = req or ReportRequest()
     agent = _pm()
-    role = (auth.current_user(request) or {}).get("role") or "admin"
+    role = (auth.current_user(request) or {}).get("role") or "L3"
     content = agent.chat(_report_instruction(req, role), github_context=_scoped_data(request))
     title = _report_title(req)
     note = _notes.save(title=title, content=content, note_type="report")
@@ -976,12 +976,12 @@ def generate_and_save(request: Request, req: Optional[ReportRequest] = None):
 
 
 @app.post("/api/notes/generate/stream")
-def generate_and_save_stream(request: Request, req: Optional[ReportRequest] = None):
+def generate_and_save_stream(request: Request, req: Optional[ReportRequest] = None, _: dict = Depends(auth.require_user)):
     """Stream a prompt-driven, role-aware, scoped report; then save it."""
     _require_data()
     req = req or ReportRequest()
     agent = _pm()
-    role = (auth.current_user(request) or {}).get("role") or "admin"
+    role = (auth.current_user(request) or {}).get("role") or "L3"
     title = _report_title(req)
     data = _scoped_data(request)            # only what this person may see
     instruction = _report_instruction(req, role)
@@ -1006,7 +1006,7 @@ def generate_and_save_stream(request: Request, req: Optional[ReportRequest] = No
 
 
 @app.post("/api/notes/save-to-vault/{note_id}")
-def save_existing_to_vault(note_id: str):
+def save_existing_to_vault(note_id: str, _: dict = Depends(auth.require_manager)):
     """Push an existing note from ChromaDB into the Obsidian vault."""
     all_notes = _notes.list_all()
     note = next((n for n in all_notes if n["id"] == note_id), None)
@@ -1020,7 +1020,7 @@ def save_existing_to_vault(note_id: str):
 
 
 @app.post("/api/vault/sync")
-def sync_vault():
+def sync_vault(_: dict = Depends(auth.require_manager)):
     """Scan the Obsidian vault and index any new .md files into ChromaDB."""
     vault_notes = scan_vault()
     indexed = 0
@@ -1055,7 +1055,7 @@ def vault_status():
 
 
 @app.delete("/api/notes/{note_id}")
-def delete_note(note_id: str):
+def delete_note(note_id: str, _: dict = Depends(auth.require_manager)):
     _notes.delete(note_id)
     return {"deleted": note_id}
 
@@ -1068,7 +1068,7 @@ FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 
 
 @app.get("/api/email/status")
-def email_status():
+def email_status(_: dict = Depends(auth.require_manager)):
     """Whether email is configured + which accounts are connected."""
     return {
         "configured": email_client.is_configured(),
@@ -1077,7 +1077,7 @@ def email_status():
 
 
 @app.get("/api/email/connect")
-def email_connect():
+def email_connect(_: dict = Depends(auth.require_admin)):
     """Return the Microsoft sign-in URL for the user to grant inbox access."""
     if not email_client.is_configured():
         raise HTTPException(400, "Email is not configured. Set MS_CLIENT_ID / MS_CLIENT_SECRET.")
@@ -1112,7 +1112,7 @@ def email_callback(request: Request, code: str = "", state: str = "", error: str
 
 
 @app.post("/api/email/sync")
-def email_sync():
+def email_sync(_: dict = Depends(auth.require_admin)):
     """Pull recent emails from every connected inbox into the RAG store
     so the AI chat can reference them."""
     if not email_client.is_configured():
@@ -1144,7 +1144,7 @@ def email_sync():
 
 
 @app.delete("/api/email/accounts/{email}")
-def email_disconnect(email: str):
+def email_disconnect(email: str, _: dict = Depends(auth.require_admin)):
     if not db.delete_email_account(email):
         raise HTTPException(404, "Account not connected")
     return {"disconnected": email}
@@ -1170,7 +1170,7 @@ class CalendarCreateBody(BaseModel):
 
 
 @app.post("/api/email/scan-to-events")
-def scan_emails_to_events():
+def scan_emails_to_events(_: dict = Depends(auth.require_admin)):
     """Scan every connected inbox and have the AI propose calendar events.
     Returns proposals for review — deliberately does NOT create anything yet."""
     if not email_client.is_configured():
@@ -1200,7 +1200,7 @@ def scan_emails_to_events():
 
 
 @app.post("/api/calendar/create")
-def create_calendar_events(body: CalendarCreateBody):
+def create_calendar_events(body: CalendarCreateBody, _: dict = Depends(auth.require_admin)):
     """Create the (reviewed) events on the connected account's Microsoft calendar."""
     if not email_client.is_configured():
         raise HTTPException(400, "Email is not configured.")

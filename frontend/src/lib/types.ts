@@ -87,7 +87,7 @@ export interface GraphNode { id: string; label: string; type: "person" | "projec
 export interface GraphEdge { source: string; target: string; }
 export interface GraphData { nodes: GraphNode[]; edges: GraphEdge[]; }
 
-export type Role = "admin" | "manager" | "intern";
+export type Role = "L1" | "L2" | "L3";  // L1 intern < L2 manager < L3 honcho
 
 export interface User {
   email: string;

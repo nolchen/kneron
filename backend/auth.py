@@ -6,13 +6,13 @@ email/calendar integration. On callback we look the person up in the `users`
 table, mint a signed JWT, and drop it in an httpOnly cookie. Every request then
 carries that cookie; `current_user` decodes it back to a user record.
 
-Roles: admin > manager > intern.
-  - admin   : everything, incl. changing other people's roles
-  - manager : assign / edit tasks for anyone (e.g. give an intern work)
-  - intern  : see the board, work their own tasks
+Roles are tiered levels L1 < L2 < L3 (L1 lowest, L3 highest):
+  - L3 (honcho)  : everything, incl. changing other people's roles
+  - L2 (manager) : assign / edit tasks for anyone (e.g. give an L1 work)
+  - L1 (intern)  : see the board, work their own tasks
 
 Rollout safety: gating only takes effect when AUTH_ENFORCED is on. While it's
-off (the default), the role dependencies pass through as a synthetic admin, so
+off (the default), the role dependencies pass through as a synthetic L3, so
 the existing demo keeps working until SSO is wired up and you flip the switch.
 """
 
@@ -26,7 +26,7 @@ from fastapi import HTTPException, Request
 
 import db
 
-ROLES = ("admin", "manager", "intern")
+ROLES = ("L1", "L2", "L3")  # ordered low -> high
 
 SESSION_COOKIE = "pm_session"
 OAUTH_STATE_COOKIE = "pm_oauth_state"
@@ -133,13 +133,13 @@ def exchange_code(code: str) -> dict:
 
 def decide_role(email: str) -> str:
     """Role for a brand-new user. FIRST_ADMIN_EMAIL (or the very first person to
-    sign in) becomes admin so there's always someone who can manage roles."""
+    sign in) becomes L3 (honcho) so there's always someone who can manage roles."""
     first_admin = os.environ.get("FIRST_ADMIN_EMAIL", "").lower()
     if first_admin and email == first_admin:
-        return "admin"
+        return "L3"
     if db.count_users() == 0:
-        return "admin"
-    return "intern"
+        return "L3"
+    return "L1"
 
 
 def login_user(email: str, name: str) -> dict:
@@ -169,7 +169,7 @@ def current_user(request: Request) -> dict | None:
 # FastAPI dependencies
 # ---------------------------------------------------------------------------
 
-_DEV_ADMIN = {"email": "dev@local", "name": "Dev (auth off)", "role": "admin"}
+_DEV_ADMIN = {"email": "dev@local", "name": "Dev (auth off)", "role": "L3"}
 
 
 def require_user(request: Request) -> dict:
@@ -182,7 +182,7 @@ def require_user(request: Request) -> dict:
 
 
 def require_role(*roles: str):
-    """Dependency factory: Depends(require_role('admin','manager'))."""
+    """Dependency factory: Depends(require_role('L2','L3'))."""
     def dep(request: Request) -> dict:
         u = require_user(request)
         if not auth_enforced():
@@ -193,5 +193,5 @@ def require_role(*roles: str):
     return dep
 
 
-require_manager = require_role("admin", "manager")
-require_admin = require_role("admin")
+require_manager = require_role("L2", "L3")   # L2 (manager) and up
+require_admin = require_role("L3")           # L3 (honcho) only

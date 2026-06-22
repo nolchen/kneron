@@ -50,10 +50,10 @@ export const useAuth = () => useContext(AuthCtx);
 /**
  * Can the current viewer manage tasks (create / assign / edit / delete)?
  * When auth isn't enforced the app is open (demo mode) so everyone can — this
- * mirrors the backend, which treats unenforced requests as admin. When enforced,
- * only managers and admins can; interns get a read-only board.
+ * mirrors the backend, which treats unenforced requests as L3. When enforced,
+ * only L2 and L3 can; L1 gets a read-only board.
  */
 export function canManage(user: User | null, enforced: boolean): boolean {
   if (!enforced) return true;
-  return !!user && (user.role === "admin" || user.role === "manager");
+  return !!user && (user.role === "L3" || user.role === "L2");
 }

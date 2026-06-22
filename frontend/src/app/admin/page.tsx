@@ -6,7 +6,7 @@ import { User, Role } from "@/lib/types";
 import { useAuth } from "@/lib/auth";
 import { RefreshCw, ShieldAlert, Users as UsersIcon } from "lucide-react";
 
-const ROLES: Role[] = ["admin", "manager", "intern"];
+const ROLES: Role[] = ["L3", "L2", "L1"];
 
 export default function AdminPage() {
   const { user, enforced, loading: authLoading } = useAuth();
@@ -15,7 +15,7 @@ export default function AdminPage() {
   const [error, setError] = useState("");
   const [savingEmail, setSavingEmail] = useState("");
 
-  const allowed = !enforced || user?.role === "admin";
+  const allowed = !enforced || user?.role === "L3";
 
   useEffect(() => {
     if (authLoading) return;
