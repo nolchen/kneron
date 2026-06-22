@@ -1,0 +1,51 @@
+#!/bin/sh
+#
+# Blocks commits that introduce secret-shaped files or high-entropy key strings.
+# Bypass intentionally with:  git commit --no-verify
+#
+# This hook is tracked in the repo (.githooks/) and activated by:
+#     git config core.hooksPath .githooks
+# (start.sh does this automatically on first run.)
+#
+# Two checks:
+#   1) Filename check  — refuse .env / .pem / .key / id_rsa / *secret* files
+#      (but allow *.example / *.sample templates).
+#   2) Content check   — refuse staged diffs that add common live-key prefixes.
+
+red()  { printf '\033[31m%s\033[0m\n' "$1"; }
+fail=0
+
+# Staged files (added/copied/modified), names only.
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+
+# --- 1) Filename check ---------------------------------------------------
+for f in $staged; do
+	base=$(basename "$f")
+	case "$base" in
+		*.example|*.sample|*.template) continue ;;
+	esac
+	case "$base" in
+		.env|.env.*|*.pem|*.key|id_rsa|id_dsa|id_ecdsa|id_ed25519|*.pfx|*.p12|credentials|credentials.json)
+			red "BLOCKED: '$f' looks like a secret file and must not be committed."
+			fail=1 ;;
+	esac
+done
+
+# --- 2) Content check (added lines only) ---------------------------------
+# ghp_/github_pat_ = GitHub tokens, sk-/sk-ant- = OpenAI/Anthropic,
+# gsk_ = Groq, xox[baprs]- = Slack, AKIA = AWS, AIza = Google,
+# -----BEGIN ... PRIVATE KEY = PEM blocks.
+pattern='(ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|sk-(ant-)?[A-Za-z0-9_-]{20,}|gsk_[A-Za-z0-9]{30,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,}|-----BEGIN [A-Z ]*PRIVATE KEY-----)'
+hits=$(git diff --cached --diff-filter=ACM -U0 -G"$pattern" | grep -nE '^\+' | grep -vE '^\+\+\+' | grep -E "$pattern")
+if [ -n "$hits" ]; then
+	red "BLOCKED: staged changes contain what looks like a live secret:"
+	printf '%s\n' "$hits" | sed -E 's/(.{0,12}).*/  \1…(redacted)/'
+	fail=1
+fi
+
+if [ "$fail" -ne 0 ]; then
+	echo ""
+	echo "Commit aborted. Remove the secret, or bypass with: git commit --no-verify"
+	exit 1
+fi
+exit 0

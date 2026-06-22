@@ -5,6 +5,12 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND="$ROOT/backend"
 FRONTEND="$ROOT/frontend"
 
+# Activate the tracked git hooks (secret-leak guard) for this clone. Idempotent.
+if [ -d "$ROOT/.git" ] && [ "$(git -C "$ROOT" config --get core.hooksPath)" != ".githooks" ]; then
+  git -C "$ROOT" config core.hooksPath .githooks && echo "==> Enabled .githooks (pre-commit secret guard)."
+fi
+chmod +x "$ROOT/.githooks/"* 2>/dev/null
+
 # Backend
 if [ ! -d "$BACKEND/.venv" ]; then
   echo "==> Running backend setup first..."
