@@ -8,6 +8,7 @@ thing that changes between local dev and cloud hosting is a few env vars.
   Local (free, default):   LLM_PROVIDER=ollama   (Ollama on your machine)
   Cloud (free tier):       LLM_PROVIDER=groq     + GROQ_API_KEY
   Cloud (paid):            LLM_PROVIDER=openai   + OPENAI_API_KEY
+  Private / on-prem:       LLM_PROVIDER=kneo     + KNEO_BASE_URL/KNEO_MODEL  (Kneron KNEO 350)
 """
 
 import os
@@ -42,6 +43,25 @@ def llm_config() -> dict:
             "api_key":  os.environ.get("OPENAI_API_KEY", ""),
             "model":    os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
         }
+    if provider == "kneo":
+        # Kneron KNEO 350 — private, on-prem edge AI (OpenClaw / KneoChat). Keeps
+        # all PM data inside the company; nothing goes to a cloud LLM.
+        #
+        # ASSUMES an OpenAI-compatible endpoint, i.e. POST {base_url}/chat/completions.
+        # Confirm with the internal KNEO team before relying on this:
+        #   1. base URL of the API            -> KNEO_BASE_URL (e.g. http://kneo-350.internal:8000/v1)
+        #   2. whether it needs a key/token   -> KNEO_API_KEY  (left as a non-empty
+        #                                        placeholder below; KNEO may ignore it)
+        #   3. the served model name          -> KNEO_MODEL
+        # If KNEO turns out NOT to be OpenAI-compatible (proprietary request/response
+        # shape), this branch stays but pm_agent needs a small adapter for it instead
+        # of the plain `openai` SDK call.
+        return {
+            "provider": "kneo",
+            "base_url": os.environ.get("KNEO_BASE_URL", ""),
+            "api_key":  os.environ.get("KNEO_API_KEY", "kneo"),  # non-empty: the openai SDK requires it
+            "model":    os.environ.get("KNEO_MODEL", ""),
+        }
     # default: ollama (local, free)
     return {
         "provider": "ollama",
@@ -72,6 +92,18 @@ def embed_config() -> dict:
             "url":      os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1") + "/embeddings",
             "api_key":  os.environ.get("OPENAI_API_KEY", ""),
             "model":    os.environ.get("OPENAI_EMBED_MODEL", "text-embedding-3-small"),
+            "style":    "openai",
+        }
+    if provider == "kneo":
+        # KNEO embeddings, assuming an OpenAI-compatible /embeddings endpoint.
+        # If KNEO has no embeddings API, set EMBED_PROVIDER=none (notes still save
+        # via the fallback vector, semantic search disabled) or point EMBED_PROVIDER
+        # at ollama/openai while only chat runs on KNEO.
+        return {
+            "provider": "kneo",
+            "url":      os.environ.get("KNEO_BASE_URL", "") + "/embeddings",
+            "api_key":  os.environ.get("KNEO_API_KEY", "kneo"),
+            "model":    os.environ.get("KNEO_EMBED_MODEL", ""),
             "style":    "openai",
         }
     # default: ollama (local, free)
