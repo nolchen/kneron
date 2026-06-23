@@ -37,6 +37,7 @@ export default function ChatPage() {
       const res = await fetch(`${BASE}/api/chat/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",   // send the session cookie (required once auth is enforced)
         body: JSON.stringify({ message: text, history: historyRef.current, include_github: true }),
       });
       if (!res.ok || !res.body) throw new Error("Stream failed");

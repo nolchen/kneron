@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 import { RefreshCw, ShieldAlert, Users as UsersIcon } from "lucide-react";
 
 const ROLES: Role[] = ["L3", "L2", "L1"];
+const RANK: Record<string, number> = { L1: 1, L2: 2, L3: 3 };
 
 export default function AdminPage() {
   const { user, enforced, loading: authLoading } = useAuth();
@@ -16,6 +17,14 @@ export default function AdminPage() {
   const [savingEmail, setSavingEmail] = useState("");
 
   const allowed = !enforced || user?.role === "L3";
+  // You can only assign levels strictly below your own, and never edit your own
+  // row or anyone at/above your level. Demo mode (unenforced) acts as top tier.
+  const myRank = !enforced ? 99 : RANK[user?.role ?? "L1"] ?? 0;
+  const canEditRow = (u: User) => u.email !== user?.email && RANK[u.role] < myRank;
+  const roleOptions = (current: Role): Role[] => {
+    const opts = ROLES.filter((r) => RANK[r] < myRank);
+    return opts.includes(current) ? opts : [current, ...opts];
+  };
 
   useEffect(() => {
     if (authLoading) return;
@@ -83,12 +92,12 @@ export default function AdminPage() {
                   <p className="text-xs text-text-3">{u.email}</p>
                 </td>
                 <td className="px-4 py-3">
-                  <select className={sel} value={u.role} onChange={(e) => changeRole(u.email, e.target.value as Role)}>
-                    {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                  <select className={sel} value={u.role} disabled={!canEditRow(u)} onChange={(e) => changeRole(u.email, e.target.value as Role)}>
+                    {roleOptions(u.role).map((r) => <option key={r} value={r}>{r}</option>)}
                   </select>
                 </td>
                 <td className="px-4 py-3">
-                  <select className={sel} value={u.manager_email ?? ""} onChange={(e) => changeManager(u.email, e.target.value)}>
+                  <select className={sel} value={u.manager_email ?? ""} disabled={!canEditRow(u)} onChange={(e) => changeManager(u.email, e.target.value)}>
                     <option value="">— none —</option>
                     {users.filter((m) => m.email !== u.email).map((m) => (
                       <option key={m.email} value={m.email}>{m.name || m.email}</option>

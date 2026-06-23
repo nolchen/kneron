@@ -233,16 +233,42 @@ app.add_middleware(
 )
 
 
+def _login_from_email(email: str) -> str:
+    """Stable team-member login derived from an email local-part."""
+    return email.split("@")[0].replace(".", "_").lower()
+
+
+def _ensure_member_from_inbox(email: str, name: str = "") -> None:
+    """A connected inbox == a person on the team. Idempotent — adds them to the
+    board if not already there. This is how the team is built when demo data is
+    off: only people who've actually connected an inbox show up."""
+    login = _login_from_email(email)
+    if not db.member_exists(login):
+        db.add_team_member({
+            "login": login, "role": "", "email": email, "workload_score": 0,
+            "repos_active": [], "open_issues": 0, "open_prs": 0, "recent_commits": 0,
+        })
+
+
+def _seed_demo_enabled() -> bool:
+    return os.environ.get("SEED_DEMO_DATA", "true").lower() in ("1", "true", "yes", "on")
+
+
 @app.on_event("startup")
 def startup():
-    """Init the database. Seed demo data only on a fresh, empty DB —
-    existing data is preserved across restarts."""
+    """Init the database. With SEED_DEMO_DATA on, seed mock data on a fresh DB.
+    With it off, the team is built purely from connected inboxes."""
     db.init_db()
-    if not db.get_team_members() and _data_snapshot() is None:
-        _seed_mock(reset_assignments=True)
-        print("[startup] Fresh DB — demo data seeded.")
+    if _seed_demo_enabled():
+        if not db.get_team_members() and _data_snapshot() is None:
+            _seed_mock(reset_assignments=True)
+            print("[startup] Fresh DB — demo data seeded.")
+        else:
+            print("[startup] Existing data found — loaded from database.")
     else:
-        print("[startup] Existing data found — loaded from database.")
+        for acct in db.list_email_accounts():
+            _ensure_member_from_inbox(acct["email"], acct.get("name", ""))
+        print("[startup] Demo seeding OFF — team = connected inboxes only.")
 
     # Best-effort: index Obsidian vault notes so the AI chat can reference them.
     # ChromaDB is ephemeral on some hosts, so re-index on each boot.
@@ -352,6 +378,8 @@ def auth_callback(request: Request, code: str = "", state: str = ""):
     # refresh token so the AI can scan their inbox / write events on their behalf.
     if info.get("refresh_token"):
         db.save_email_account(info["email"], info["name"], info["refresh_token"], datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
+    if not _seed_demo_enabled():
+        _ensure_member_from_inbox(info["email"], info.get("name", ""))
     token = auth.make_session_token(user["email"])
     resp = RedirectResponse(os.environ.get("FRONTEND_URL", "http://localhost:3000"))
     resp.set_cookie(auth.SESSION_COOKIE, token, **auth.cookie_kwargs())
@@ -407,10 +435,20 @@ class RoleUpdate(BaseModel):
 
 
 @app.put("/api/users/{email}/role")
-def set_user_role(email: str, body: RoleUpdate, _: dict = Depends(auth.require_admin)):
+def set_user_role(email: str, body: RoleUpdate, actor: dict = Depends(auth.require_manager)):
     if body.role not in auth.ROLES:
         raise HTTPException(400, f"role must be one of {auth.ROLES}")
-    user = db.set_user_role(email.strip().lower(), body.role)
+    target = email.strip().lower()
+    if target == (actor.get("email") or "").lower():
+        raise HTTPException(403, "You can't change your own role.")
+    # You may only assign a level strictly below your own (L3→≤L2, L2→L1).
+    if not auth.can_grant(actor["role"], body.role):
+        raise HTTPException(403, f"As {actor['role']} you can only assign roles below your own level.")
+    # And you can't touch someone already at or above your own level.
+    existing = db.get_user(target)
+    if existing and not auth.can_grant(actor["role"], existing["role"]):
+        raise HTTPException(403, "You can't change the role of someone at or above your level.")
+    user = db.set_user_role(target, body.role)
     if user is None:
         raise HTTPException(404, "User not found")
     return user
@@ -1068,11 +1106,17 @@ FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 
 
 @app.get("/api/email/status")
-def email_status(_: dict = Depends(auth.require_manager)):
-    """Whether email is configured + which accounts are connected."""
+def email_status(user: dict = Depends(auth.require_user)):
+    """Whether email is configured + which accounts are connected. Any signed-in
+    user can read this (so they see their own inbox); non-managers only see their
+    own account, managers/admins see the whole connected pool."""
+    accounts = db.list_email_accounts()
+    if auth.auth_enforced() and user.get("role") not in ("L2", "L3"):
+        own = (user.get("email") or "").lower()
+        accounts = [a for a in accounts if a["email"].lower() == own]
     return {
         "configured": email_client.is_configured(),
-        "accounts": db.list_email_accounts(),
+        "accounts": accounts,
     }
 
 
@@ -1104,6 +1148,8 @@ def email_callback(request: Request, code: str = "", state: str = "", error: str
             refresh_token=tok["refresh_token"],
             connected_at=datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         )
+        if not _seed_demo_enabled():
+            _ensure_member_from_inbox(tok["email"], tok.get("name", ""))
         resp = RedirectResponse(f"{FRONTEND_URL}/email?connected={tok['email']}")
         resp.delete_cookie(auth.OAUTH_STATE_COOKIE, path="/")  # one-time use
         return resp

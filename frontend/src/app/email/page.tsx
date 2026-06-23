@@ -3,11 +3,14 @@
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
+import { useAuth, canManage } from "@/lib/auth";
 import { EmailAccount } from "@/lib/types";
 import { Mail, RefreshCw, Plus, Trash2, CheckCircle2, AlertTriangle, Inbox } from "lucide-react";
 
 function EmailInner() {
   const params = useSearchParams();
+  const { user, enforced } = useAuth();
+  const manage = canManage(user, enforced);   // L2+ run the shared inbox pool
   const [configured, setConfigured] = useState(false);
   const [accounts, setAccounts]     = useState<EmailAccount[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -15,7 +18,9 @@ function EmailInner() {
   const [banner, setBanner]         = useState<{ type: "ok" | "err"; msg: string } | null>(null);
 
   const reload = () =>
-    api.emailStatus().then((r) => { setConfigured(r.configured); setAccounts(r.accounts); });
+    api.emailStatus()
+      .then((r) => { setConfigured(r.configured); setAccounts(r.accounts); })
+      .catch(() => { /* not signed in / no access — leave defaults, don't crash */ });
 
   useEffect(() => {
     // Show result of an OAuth redirect (?connected=... or ?error=...)
@@ -83,19 +88,21 @@ function EmailInner() {
         </div>
       ) : (
         <>
-          <div className="flex gap-2 mb-6">
-            <button onClick={handleConnect}
-              className="flex items-center gap-2 rounded-lg bg-brand-purple px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
-              <Plus className="h-4 w-4" /> Connect an inbox
-            </button>
-            {accounts.length > 0 && (
-              <button onClick={handleSync} disabled={syncing}
-                className="flex items-center gap-2 rounded-lg border border-ui-border bg-surface px-4 py-2 text-sm font-medium text-text-1 hover:bg-subtle disabled:opacity-50">
-                {syncing ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Inbox className="h-4 w-4" />}
-                Sync emails now
+          {manage && (
+            <div className="flex gap-2 mb-6">
+              <button onClick={handleConnect}
+                className="flex items-center gap-2 rounded-lg bg-brand-purple px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
+                <Plus className="h-4 w-4" /> Connect an inbox
               </button>
-            )}
-          </div>
+              {accounts.length > 0 && (
+                <button onClick={handleSync} disabled={syncing}
+                  className="flex items-center gap-2 rounded-lg border border-ui-border bg-surface px-4 py-2 text-sm font-medium text-text-1 hover:bg-subtle disabled:opacity-50">
+                  {syncing ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Inbox className="h-4 w-4" />}
+                  Sync emails now
+                </button>
+              )}
+            </div>
+          )}
 
           <h2 className="text-sm font-semibold text-text-1 mb-3">Connected inboxes ({accounts.length})</h2>
           <div className="flex flex-col gap-2">
@@ -110,16 +117,18 @@ function EmailInner() {
                     {a.email}{a.last_synced ? ` · last synced ${new Date(a.last_synced).toLocaleDateString()}` : " · not synced yet"}
                   </p>
                 </div>
-                <button onClick={() => handleDisconnect(a.email)}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-red-50">
-                  <Trash2 className="h-3.5 w-3.5 text-red-400" />
-                </button>
+                {manage && (
+                  <button onClick={() => handleDisconnect(a.email)}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-red-50">
+                    <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                  </button>
+                )}
               </div>
             ))}
             {accounts.length === 0 && (
               <div className="flex flex-col items-center justify-center py-16 gap-2 text-text-3">
                 <Inbox className="h-8 w-8" />
-                <p className="text-sm">No inboxes connected. Click “Connect an inbox” to start.</p>
+                <p className="text-sm">{manage ? "No inboxes connected. Click “Connect an inbox” to start." : "Your inbox isn’t connected yet — sign in with Microsoft to connect it."}</p>
               </div>
             )}
           </div>

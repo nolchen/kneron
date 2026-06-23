@@ -28,14 +28,27 @@ import db
 
 ROLES = ("L1", "L2", "L3")  # ordered low -> high
 
+
+def rank(role: str) -> int:
+    """Numeric rank of a role; -1 if unknown. L1=0 < L2=1 < L3=2."""
+    return ROLES.index(role) if role in ROLES else -1
+
+
+def can_grant(actor_role: str, target_role: str) -> bool:
+    """True if an actor may assign `target_role` to someone — only levels
+    STRICTLY below the actor's own. So L3 manages up to L2, L2 up to L1, and
+    nobody can mint another L3 through the API (the top admin is env-pinned)."""
+    return rank(actor_role) > rank(target_role)
+
 SESSION_COOKIE = "pm_session"
 OAUTH_STATE_COOKIE = "pm_oauth_state"
 _TOKEN_TTL = 60 * 60 * 24 * 7  # 7 days
-# Sign-in is unified with mailbox + calendar access: one Microsoft consent grants
-# identity AND the Graph scopes the AI needs to scan the person's inbox and write
-# to their calendar. MSAL adds openid/profile/email/offline_access automatically
-# (offline_access is what yields the refresh token we store).
-LOGIN_SCOPES = ["User.Read", "Mail.Read", "Calendars.ReadWrite"]
+# Sign-in only needs identity. Mailbox + calendar access is a SEPARATE, opt-in
+# consent handled by the Connect-Email flow (email_client.SCOPES) — so just
+# logging into the dashboard never requires mail/calendar permissions (and thus
+# no admin-consent wall for plain sign-in). MSAL adds openid/profile/email
+# automatically.
+LOGIN_SCOPES = ["User.Read"]
 
 
 # ---------------------------------------------------------------------------

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useAuth, canManage } from "@/lib/auth";
 import { TeamMember, Assignment } from "@/lib/types";
 import { formatName, initials } from "@/lib/utils";
 import { RefreshCw, ClipboardList, Zap, Plus, Trash2 } from "lucide-react";
@@ -78,6 +79,8 @@ export default function TeamPage() {
   const [showAdd, setShowAdd]       = useState(false);
   const [removing, setRemoving]     = useState<string | null>(null);
   const [error, setError]           = useState("");
+  const { user, enforced } = useAuth();
+  const manage = canManage(user, enforced);   // L2+ (or open demo mode)
 
   useEffect(() => {
     Promise.all([api.getTeam(), api.getAssignments()])
@@ -111,9 +114,11 @@ export default function TeamPage() {
           <h1 className="text-2xl font-bold text-text-1">Team</h1>
           <p className="text-sm text-text-2 mt-1">{team.length} members</p>
         </div>
-        <button onClick={() => setShowAdd(true)} className="flex items-center gap-2 rounded-lg bg-brand-purple px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
-          <Plus className="h-4 w-4" /> Add Member
-        </button>
+        {manage && (
+          <button onClick={() => setShowAdd(true)} className="flex items-center gap-2 rounded-lg bg-brand-purple px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
+            <Plus className="h-4 w-4" /> Add Member
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -124,13 +129,15 @@ export default function TeamPage() {
 
           return (
             <div key={member.login} className="group relative rounded-xl bg-surface border border-ui-border p-5 shadow-sm">
-              <button
-                onClick={() => handleRemove(member.login)}
-                disabled={removing === member.login}
-                className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-red-50"
-              >
-                {removing === member.login ? <RefreshCw className="h-3.5 w-3.5 animate-spin text-red-400" /> : <Trash2 className="h-3.5 w-3.5 text-red-400" />}
-              </button>
+              {manage && (
+                <button
+                  onClick={() => handleRemove(member.login)}
+                  disabled={removing === member.login}
+                  className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-red-50"
+                >
+                  {removing === member.login ? <RefreshCw className="h-3.5 w-3.5 animate-spin text-red-400" /> : <Trash2 className="h-3.5 w-3.5 text-red-400" />}
+                </button>
+              )}
 
               <div className="flex items-center gap-3 mb-4">
                 <Avatar login={member.login} />

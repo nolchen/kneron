@@ -17,6 +17,9 @@ _TMP = tempfile.mkdtemp(prefix="pm_test_")
 os.environ["DATA_DIR"] = _TMP
 os.environ["VAULT_PATH"] = os.path.join(_TMP, "vault")
 os.environ["LLM_PROVIDER"] = "ollama"  # not actually called in these tests
+# Existing functional tests exercise features in open/demo mode; the dedicated
+# RBAC test below flips enforcement on itself. (load_dotenv won't override these.)
+os.environ["AUTH_ENFORCED"] = "false"
 
 from fastapi.testclient import TestClient
 import main
@@ -160,3 +163,33 @@ def test_email_status_configured_flag(monkeypatch):
     monkeypatch.setenv("MS_CLIENT_ID", "fake-id")
     monkeypatch.setenv("MS_CLIENT_SECRET", "fake-secret")
     assert client.get("/api/email/status").json()["configured"] is True
+
+
+# ---------------------------------------------------------------------------
+# Role-based access control (enforced mode)
+# ---------------------------------------------------------------------------
+
+def test_role_hierarchy_enforced(monkeypatch):
+    """With AUTH_ENFORCED on, a user may only assign a level strictly below
+    their own — and never escalate themselves. Guards against the privilege-
+    escalation bug where any L1 could make themselves L3."""
+    import auth
+    monkeypatch.setenv("AUTH_ENFORCED", "true")
+    for email, role in [("l3@k.us", "L3"), ("l2@k.us", "L2"),
+                        ("l1@k.us", "L1"), ("t@k.us", "L1"), ("t2@k.us", "L2")]:
+        main.db.upsert_user(email=email, name=email, role=role)
+
+    def sess(email):
+        return {auth.SESSION_COOKIE: auth.make_session_token(email)}
+
+    def set_role(actor, target, role):
+        return client.put(f"/api/users/{target}/role", json={"role": role},
+                          cookies=sess(actor)).status_code
+
+    assert set_role("l1@k.us", "t@k.us", "L1") == 403   # L1 can't manage anyone
+    assert set_role("l2@k.us", "t@k.us", "L1") == 200   # L2 manages an L1
+    assert set_role("l2@k.us", "t@k.us", "L2") == 403   # can't grant own level
+    assert set_role("l2@k.us", "t2@k.us", "L1") == 403  # can't touch an L2
+    assert set_role("l3@k.us", "t@k.us", "L2") == 200   # L3 grants up to L2
+    assert set_role("l3@k.us", "t@k.us", "L3") == 403   # nobody mints an L3
+    assert set_role("l3@k.us", "l3@k.us", "L2") == 403  # no self-edit
