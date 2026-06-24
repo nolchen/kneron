@@ -58,7 +58,7 @@ export default function GraphPanel() {
       for (let i = 0; i < nodes.length; i++) {
         for (let j = i + 1; j < nodes.length; j++) {
           const A = P0[nodes[i].id], B = P0[nodes[j].id];
-          let dx = A.x - B.x, dy = A.y - B.y, dz = A.z - B.z;
+          const dx = A.x - B.x, dy = A.y - B.y, dz = A.z - B.z;
           const d2 = dx * dx + dy * dy + dz * dz + 0.01, d = Math.sqrt(d2);
           const f = 2600 / d2, ux = dx / d, uy = dy / d, uz = dz / d;
           A.vx += ux * f; A.vy += uy * f; A.vz += uz * f;

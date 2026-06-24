@@ -16,13 +16,15 @@ const eslintConfig = defineConfig([
   {
     // React Compiler advisory rules (new in this Next version). The established
     // patterns in this codebase intentionally trip them — data fetching inside
-    // useEffect, and date math during render. They don't represent bugs and the
-    // build is unaffected, so keep them as warnings (visible, non-blocking)
-    // rather than hard errors.
+    // useEffect, date math during render, and the GraphPanel ref-driven
+    // animation loop that reads pos/tick refs during render to project each
+    // frame. They don't represent bugs and the build is unaffected, so keep
+    // them as warnings (visible, non-blocking) rather than hard errors.
     rules: {
       "react-hooks/set-state-in-effect": "warn",
       "react-hooks/purity": "warn",
       "react-hooks/immutability": "warn",
+      "react-hooks/refs": "warn",
     },
   },
 ]);
