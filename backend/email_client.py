@@ -15,9 +15,13 @@ import httpx
 import msal
 
 GRAPH = "https://graph.microsoft.com/v1.0"
-# Mail.Read to scan inboxes; Calendars.ReadWrite to create events on the user's calendar.
-# offline_access is added automatically by MSAL.
-SCOPES = ["Mail.Read", "Calendars.ReadWrite", "User.Read"]
+# Mail.Read to scan inboxes; User.Read for identity. offline_access is added by MSAL.
+# NOTE: Calendars.ReadWrite is intentionally NOT requested here — extracted events
+# are written to the app's OWN calendar (no MS permission needed). Re-add it once
+# admin consent for Calendars.ReadWrite is granted to also mirror into Outlook.
+SCOPES = ["Mail.Read", "User.Read"]
+# Scopes for the optional Outlook-calendar mirror (used only when consent exists).
+CALENDAR_SCOPES = ["Calendars.ReadWrite"]
 
 
 def _cfg() -> dict:

@@ -813,6 +813,10 @@ def scan_my_inbox(user: dict = Depends(auth.require_user)):
         messages = email_client.fetch_recent_messages(token, top=25)
     except Exception as e:
         raise HTTPException(502, f"Couldn't read your inbox: {e}")
+    # Drop automated/promotional noise so the extractor isn't diluted by it.
+    NOISE = ("no-reply", "noreply", "donotreply", "promomail", "newsletter",
+             "notifications@", "mailer", "updates@", "@promo")
+    messages = [m for m in messages if not any(t in (m.get("from") or "").lower() for t in NOISE)]
     if not messages:
         return {"proposals": [], "scanned": 0}
     emails_text = "\n\n".join(
@@ -820,7 +824,20 @@ def scan_my_inbox(user: dict = Depends(auth.require_user)):
         for m in messages
     )
     today = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d")
-    proposals = _pm().extract_events(emails_text, today)
+    raw = _pm().extract_events(emails_text, today)
+    # Keep only well-formed, confident events; normalise nulls the small model
+    # sometimes emits so the confirm step always gets valid strings.
+    proposals = [
+        {
+            "title": p["title"],
+            "start": p["start"],
+            "end": p.get("end") or "",
+            "attendees": p.get("attendees") or [],
+            "source_subject": p.get("source_subject") or "",
+        }
+        for p in raw
+        if p.get("title") and p.get("start") and p.get("confidence", 1) >= 0.5
+    ]
     db.set_email_synced(user["email"], datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
     return {"proposals": proposals, "scanned": len(messages)}
 
@@ -840,33 +857,59 @@ class ConfirmEvents(BaseModel):
 
 @app.post("/api/me/calendar/confirm")
 def confirm_my_events(body: ConfirmEvents, user: dict = Depends(auth.require_user)):
-    """Write the user-approved events to their Outlook calendar (and optionally
-    mirror them onto their task board)."""
-    token = _user_access_token(user)
+    """Land approved events on the app's OWN calendar/board (always — needs no
+    Microsoft permission). Also mirror to the user's Outlook calendar when the
+    Calendars.ReadWrite consent is available; if it isn't, the in-app calendar
+    still gets the event so the feature works without admin consent."""
     my_login = _login_for_email(user["email"])
+    # Best-effort Outlook token; may lack the calendar scope (or no inbox) — fine.
+    try:
+        token = _user_access_token(user)
+    except Exception:
+        token = None
+
     results = []
     for ev in body.events:
         end = ev.end or ev.start
-        try:
-            created = email_client.create_calendar_event(
-                token, subject=ev.title, start_iso=ev.start, end_iso=end,
-                body=f"Added by PM Agent from email: {ev.source_subject}",
-                attendees=ev.attendees,
-            )
-            if ev.add_to_board and my_login:
-                db.add_assignment({
-                    "id":         str(uuid.uuid4()),
-                    "title":      ev.title,
-                    "assignees":  [my_login],
-                    "due_date":   (ev.start or "")[:10],
-                    "priority":   "medium",
-                    "status":     "in-progress",
-                    "notes":      f"From email: {ev.source_subject}",
-                    "created_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
-                })
-            results.append({"title": ev.title, "ok": True, "webLink": created.get("webLink")})
-        except Exception as e:
-            results.append({"title": ev.title, "ok": False, "error": str(e)})
+        # assignees = the signed-in user + any attendees who are on the team
+        assignees = []
+        if my_login:
+            assignees.append(my_login)
+        for addr in ev.attendees:
+            login = _login_from_email(addr)
+            if login != my_login and db.member_exists(login):
+                assignees.append(login)
+
+        # 1) Always write to the in-app calendar (a dated board item).
+        db.add_assignment({
+            "id":         str(uuid.uuid4()),
+            "title":      ev.title,
+            "assignees":  assignees,
+            "due_date":   (ev.start or "")[:10],
+            "priority":   "medium",
+            "status":     "in-progress",
+            "notes":      f"From email: {ev.source_subject}",
+            "created_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+        })
+
+        # 2) Best-effort mirror to Outlook (silently skipped if no calendar consent).
+        web_link, outlook_error = None, None
+        if token:
+            try:
+                created = email_client.create_calendar_event(
+                    token, subject=ev.title, start_iso=ev.start, end_iso=end,
+                    body=f"Added by PM Agent from email: {ev.source_subject}",
+                    attendees=ev.attendees,
+                )
+                web_link = created.get("webLink")
+            except Exception as e:
+                outlook_error = str(e)[:120]
+
+        results.append({
+            "title": ev.title, "ok": True, "onAppCalendar": True,
+            "outlookSynced": bool(web_link), "webLink": web_link,
+            "outlookError": outlook_error,
+        })
     return {"results": results}
 
 
