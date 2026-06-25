@@ -1,6 +1,10 @@
 import { TeamMember, Project, Task, Milestone, ChatMessage, SyncResult, Assignment, Note, EmailAccount, User, ProposedEvent, GraphData } from "./types";
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Same-origin by default: the browser calls /api/* on THIS host, and Next
+// rewrites (next.config.ts) proxy it to the backend. Keeps the session cookie
+// first-party so auth works in browsers that block third-party cookies.
+// (NEXT_PUBLIC_API_URL can still force a direct cross-origin base if needed.)
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 const BASE = API_BASE;
 
 // credentials: "include" sends/receives the session cookie cross-origin (Vercel↔Render).
