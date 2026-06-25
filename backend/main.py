@@ -258,6 +258,15 @@ def _seed_demo_enabled() -> bool:
 def startup():
     """Init the database. With SEED_DEMO_DATA on, seed mock data on a fresh DB.
     With it off, the team is built purely from connected inboxes."""
+    # Fail closed: never boot with AUTH_ENFORCED on but the companion secrets
+    # missing, which would let auth run wide open (forgeable tokens, dev-login
+    # still on, or a stranger auto-promoted to admin).
+    problems = auth.enforcement_config_errors()
+    if problems:
+        raise RuntimeError(
+            "AUTH_ENFORCED is on but unsafe to enforce — fix these and restart:\n  - "
+            + "\n  - ".join(problems)
+        )
     db.init_db()
     if _seed_demo_enabled():
         if not db.get_team_members() and _data_snapshot() is None:
@@ -412,10 +421,11 @@ class DevLogin(BaseModel):
 
 @app.post("/api/auth/dev-login")
 def auth_dev_login(body: DevLogin):
-    """Local-only shortcut to get a session without Microsoft. Disabled once SSO
-    is configured AND enforced, so it can't be used to bypass real auth in prod."""
-    if auth.is_configured() and auth.auth_enforced():
-        raise HTTPException(403, "Dev login is disabled when SSO is configured and enforced.")
+    """Local-only shortcut to get a session without Microsoft. Disabled whenever
+    auth is enforced, so it can't be used to bypass real auth in prod — even if
+    SSO isn't configured yet (which would otherwise leave this wide open)."""
+    if auth.auth_enforced():
+        raise HTTPException(403, "Dev login is disabled when auth is enforced.")
     if body.role not in auth.ROLES:
         raise HTTPException(400, f"role must be one of {auth.ROLES}")
     user = db.upsert_user(email=body.email.strip().lower(), name=body.name or body.email, role=body.role)

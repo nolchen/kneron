@@ -37,8 +37,15 @@ def rank(role: str) -> int:
 def can_grant(actor_role: str, target_role: str) -> bool:
     """True if an actor may assign `target_role` to someone — only levels
     STRICTLY below the actor's own. So L3 manages up to L2, L2 up to L1, and
-    nobody can mint another L3 through the API (the top admin is env-pinned)."""
-    return rank(actor_role) > rank(target_role)
+    nobody can mint another L3 through the API (the top admin is env-pinned).
+
+    Fail closed on an unrecognized role on either side: an unknown/legacy role
+    string (e.g. one that escaped the L1/L2/L3 migration) is treated as
+    ungrantable and untouchable rather than ranking below everyone."""
+    a, t = rank(actor_role), rank(target_role)
+    if a < 0 or t < 0:
+        return False
+    return a > t
 
 SESSION_COOKIE = "pm_session"
 OAUTH_STATE_COOKIE = "pm_oauth_state"
@@ -55,9 +62,14 @@ LOGIN_SCOPES = ["User.Read"]
 # Config
 # ---------------------------------------------------------------------------
 
+# Known, public fallback used only for local/demo runs. Signing real sessions
+# with this would let anyone forge a token, so enforcement refuses to use it.
+_DEFAULT_SECRET = "dev-insecure-change-me"
+
+
 def _secret() -> str:
     # Falls back to a dev secret so local runs work; set SESSION_SECRET in prod.
-    return os.environ.get("SESSION_SECRET", "dev-insecure-change-me")
+    return os.environ.get("SESSION_SECRET", _DEFAULT_SECRET)
 
 
 def auth_enforced() -> bool:
@@ -66,6 +78,32 @@ def auth_enforced() -> bool:
 
 def is_configured() -> bool:
     return bool(os.environ.get("MS_CLIENT_ID") and os.environ.get("MS_CLIENT_SECRET"))
+
+
+def enforcement_config_errors() -> list[str]:
+    """Companion config that MUST be present before AUTH_ENFORCED can safely be
+    on. Returns human-readable problems; empty means safe to enforce. Each item
+    is a way enforcement would otherwise fail *open* (anyone gets in / becomes
+    admin), so startup raises on any of them rather than booting wide open."""
+    if not auth_enforced():
+        return []
+    problems = []
+    if _secret() == _DEFAULT_SECRET:
+        problems.append(
+            "SESSION_SECRET is unset — session tokens would be signed with a "
+            "public default key, so anyone could forge an admin session."
+        )
+    if not is_configured():
+        problems.append(
+            "MS_CLIENT_ID / MS_CLIENT_SECRET are unset — Microsoft SSO is the "
+            "only real login under enforcement, and dev-login would stay open."
+        )
+    if not os.environ.get("FIRST_ADMIN_EMAIL", "").strip():
+        problems.append(
+            "FIRST_ADMIN_EMAIL is unset — the first person to sign in would "
+            "auto-become L3 (honcho)."
+        )
+    return problems
 
 
 def _redirect_uri() -> str:
@@ -150,7 +188,11 @@ def decide_role(email: str) -> str:
     first_admin = os.environ.get("FIRST_ADMIN_EMAIL", "").lower()
     if first_admin and email == first_admin:
         return "L3"
-    if db.count_users() == 0:
+    # Bootstrap convenience for local/demo only: the first user becomes L3 so
+    # there's always an admin. Under enforcement this is unsafe (a stranger
+    # could win the race to the public callback), and the startup guard already
+    # requires FIRST_ADMIN_EMAIL there — so never auto-grant L3 when enforced.
+    if not auth_enforced() and db.count_users() == 0:
         return "L3"
     return "L1"
 

@@ -193,3 +193,69 @@ def test_role_hierarchy_enforced(monkeypatch):
     assert set_role("l3@k.us", "t@k.us", "L2") == 200   # L3 grants up to L2
     assert set_role("l3@k.us", "t@k.us", "L3") == 403   # nobody mints an L3
     assert set_role("l3@k.us", "l3@k.us", "L2") == 403  # no self-edit
+
+
+# ---------------------------------------------------------------------------
+# Fail-closed hardening: enforcement must never run in a fail-open state.
+# ---------------------------------------------------------------------------
+
+def test_dev_login_disabled_when_enforced_even_if_sso_unconfigured(monkeypatch):
+    """Dev-login is a no-password session mint. It must be off whenever auth is
+    enforced — including when SSO isn't configured yet, which previously left it
+    open and let anyone POST themselves an L3 session."""
+    monkeypatch.setenv("AUTH_ENFORCED", "true")
+    monkeypatch.delenv("MS_CLIENT_ID", raising=False)      # SSO NOT configured
+    monkeypatch.delenv("MS_CLIENT_SECRET", raising=False)
+    r = client.post("/api/auth/dev-login", json={"email": "x@k.us", "role": "L3"})
+    assert r.status_code == 403
+
+
+def test_dev_login_allowed_in_demo_mode():
+    """With enforcement off (the demo default), dev-login still works."""
+    r = client.post("/api/auth/dev-login", json={"email": "dev@k.us", "role": "L3"})
+    assert r.status_code == 200
+    assert r.json()["user"]["role"] == "L3"
+
+
+def test_can_grant_fails_closed_on_unknown_role():
+    """A legacy/corrupt role string must not rank below everyone and become
+    freely modifiable — an unknown role on either side is ungrantable."""
+    import auth
+    assert auth.can_grant("L3", "L2") is True
+    assert auth.can_grant("L2", "L2") is False
+    assert auth.can_grant("L3", "admin") is False   # unknown target -> protected
+    assert auth.can_grant("admin", "L1") is False   # unknown actor -> powerless
+
+
+def test_enforcement_config_errors_blocks_unsafe_enforcement(monkeypatch):
+    """The startup guard flags every fail-open hole when enforcing, and clears
+    once SESSION_SECRET, SSO, and FIRST_ADMIN_EMAIL are all set."""
+    import auth
+    # Not enforced -> no requirements at all.
+    monkeypatch.setenv("AUTH_ENFORCED", "false")
+    assert auth.enforcement_config_errors() == []
+
+    # Enforced but nothing configured -> all three problems reported.
+    monkeypatch.setenv("AUTH_ENFORCED", "true")
+    monkeypatch.delenv("SESSION_SECRET", raising=False)
+    monkeypatch.delenv("MS_CLIENT_ID", raising=False)
+    monkeypatch.delenv("MS_CLIENT_SECRET", raising=False)
+    monkeypatch.delenv("FIRST_ADMIN_EMAIL", raising=False)
+    assert len(auth.enforcement_config_errors()) == 3
+
+    # Fully configured -> safe to enforce.
+    monkeypatch.setenv("SESSION_SECRET", "a-real-long-random-secret")
+    monkeypatch.setenv("MS_CLIENT_ID", "id")
+    monkeypatch.setenv("MS_CLIENT_SECRET", "secret")
+    monkeypatch.setenv("FIRST_ADMIN_EMAIL", "boss@k.us")
+    assert auth.enforcement_config_errors() == []
+
+
+def test_decide_role_no_auto_l3_when_enforced(monkeypatch):
+    """Under enforcement, only the pinned FIRST_ADMIN_EMAIL becomes L3; a random
+    first sign-in does NOT inherit honcho via the count==0 bootstrap."""
+    import auth
+    monkeypatch.setenv("AUTH_ENFORCED", "true")
+    monkeypatch.setenv("FIRST_ADMIN_EMAIL", "boss@k.us")
+    assert auth.decide_role("boss@k.us") == "L3"
+    assert auth.decide_role("stranger@k.us") == "L1"
