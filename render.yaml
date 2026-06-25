@@ -20,3 +20,24 @@ services:
         sync: false
       - key: DATABASE_URL        # Postgres conn string (Neon/Supabase) for persistent data; blank = ephemeral SQLite
         sync: false
+      # --- Auth + email (Microsoft 365). Without these, login + Connect-Email fail in prod. ---
+      - key: FRONTEND_URL        # your Vercel URL — where users get redirected back to
+        sync: false
+      - key: AUTH_ENFORCED       # true in prod, or everyone is treated as admin
+        value: "true"
+      - key: SEED_DEMO_DATA      # false = no mock data; team built from connected inboxes
+        value: "false"
+      - key: COOKIE_SECURE       # true in prod (HTTPS) so cross-site cookies work
+        value: "true"
+      - key: FIRST_ADMIN_EMAIL   # becomes the L3 admin on first sign-in
+        sync: false
+      - key: MS_CLIENT_ID
+        sync: false
+      - key: MS_CLIENT_SECRET
+        sync: false
+      - key: MS_TENANT_ID
+        sync: false
+      - key: MS_REDIRECT_URI       # https://<your-render-host>/api/email/callback
+        sync: false
+      - key: MS_LOGIN_REDIRECT_URI # https://<your-render-host>/api/auth/callback
+        sync: false

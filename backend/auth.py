@@ -149,10 +149,17 @@ def new_state() -> str:
 
 
 def state_cookie_kwargs() -> dict:
-    # samesite=lax so the cookie survives the top-level GET redirect back from
-    # Microsoft; short max_age since it's only needed for the round-trip.
+    # The Connect-Email flow sets this via a cross-origin fetch, so cross-site
+    # (Vercel↔Render) needs SameSite=None + Secure or the browser drops it as a
+    # third-party cookie. Locally (same-site localhost over http) fall back to lax.
     secure = os.environ.get("COOKIE_SECURE", "true").lower() != "false"
-    return {"httponly": True, "secure": secure, "samesite": "lax", "max_age": 600, "path": "/"}
+    return {
+        "httponly": True,
+        "secure": secure,
+        "samesite": "none" if secure else "lax",
+        "max_age": 600,
+        "path": "/",
+    }
 
 
 def verify_state(received: str, expected: str) -> bool:
