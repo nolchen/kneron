@@ -329,6 +329,10 @@ class AssignmentBody(BaseModel):
 
 @app.post("/api/mock")
 def load_mock(_: dict = Depends(auth.require_admin)):
+    # Refuse in prod: SEED_DEMO_DATA=false means demo data is intentionally off,
+    # so mock data can't sneak back in (e.g. after an ephemeral-DB wipe).
+    if not _seed_demo_enabled():
+        raise HTTPException(403, "Demo data is disabled (SEED_DEMO_DATA=false).")
     _seed_mock(reset_assignments=True)
     return {"loaded": True, "team_members": len(db.get_team_members())}
 
