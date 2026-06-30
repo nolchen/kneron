@@ -279,6 +279,12 @@ def startup():
             _ensure_member_from_inbox(acct["email"], acct.get("name", ""))
         print("[startup] Demo seeding OFF — team = connected inboxes only.")
 
+    # Data-gated endpoints (roadmap / summary / reports) require a snapshot to
+    # exist. With no GitHub sync and demo data off, none is ever created, so
+    # seed an empty one — the app then works off team + assignments alone.
+    if _data_snapshot() is None:
+        db.set_meta("github_snapshot", {"projects": [], "issues": [], "pull_requests": []})
+
     # Best-effort: index Obsidian vault notes so the AI chat can reference them.
     # ChromaDB is ephemeral on some hosts, so re-index on each boot.
     try:

@@ -34,32 +34,16 @@ export default function ChatPage() {
     setMessages((prev) => [...prev, { role: "user", content: text }, { role: "assistant", content: "", streaming: true }]);
 
     try {
-      const res = await fetch(`${BASE}/api/chat/stream`, {
+      // Non-streaming request — robust across browsers (Safari's streaming-fetch
+      // reader is unreliable) and through the Vercel→Render proxy.
+      const res = await fetch(`${BASE}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",   // send the session cookie (required once auth is enforced)
         body: JSON.stringify({ message: text, history: historyRef.current, include_github: true }),
       });
-      if (!res.ok || !res.body) throw new Error("Stream failed");
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let full = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        for (const line of decoder.decode(value, { stream: true }).split("\n")) {
-          if (!line.startsWith("data: ")) continue;
-          const payload = line.slice(6).trim();
-          if (payload === "[DONE]") break;
-          try {
-            const { chunk } = JSON.parse(payload);
-            full += chunk;
-            setMessages((prev) => [...prev.slice(0, -1), { role: "assistant", content: full, streaming: true }]);
-          } catch { /* partial chunk */ }
-        }
-      }
+      if (!res.ok) throw new Error(`Chat failed (${res.status})`);
+      const { response: full } = await res.json();
 
       setMessages((prev) => [...prev.slice(0, -1), { role: "assistant", content: full }]);
       historyRef.current = [...historyRef.current, { role: "user", content: text }, { role: "assistant", content: full }];

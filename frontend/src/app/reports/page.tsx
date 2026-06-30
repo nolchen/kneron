@@ -42,42 +42,25 @@ export default function ReportsPage() {
     setSelected(null);
 
     try {
-      const res = await fetch(`${BASE}/api/notes/generate/stream`, {
+      // Non-streaming — robust across browsers (Safari's streaming-fetch reader
+      // is unreliable) and through the Vercel→Render proxy.
+      const res = await fetch(`${BASE}/api/notes/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ prompt: reportPrompt, scope: reportScope }),
       });
-      if (!res.ok || !res.body) throw new Error("Stream failed");
-
-      const reader  = res.body.getReader();
-      const decoder = new TextDecoder();
-      let full = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        for (const line of decoder.decode(value, { stream: true }).split("\n")) {
-          if (!line.startsWith("data: ")) continue;
-          try {
-            const payload = JSON.parse(line.slice(6));
-            if (payload.chunk) {
-              full += payload.chunk;
-              setStreamContent(full);
-            }
-            if (payload.done) {
-              // Refresh note list and select the new one
-              const updated = await api.getNotes();
-              setNotes(updated.notes);
-              setSelected(updated.notes[0] ?? null);
-              setStreamContent("");
-            }
-          } catch { /* partial */ }
-        }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Report failed (${res.status})`);
       }
+      await res.json();                         // the saved note
+      const updated = await api.getNotes();      // refresh list + select newest
+      setNotes(updated.notes);
+      setSelected(updated.notes[0] ?? null);
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : "Failed to generate report");
-    } finally { setGenerating(false); }
+    } finally { setGenerating(false); setStreamContent(""); }
   };
 
   const handleSave = async () => {
