@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Bot, LogIn, RefreshCw, ShieldCheck } from "lucide-react";
+import { LogIn, RefreshCw, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { api } from "@/lib/api";
 import { Role } from "@/lib/types";
@@ -36,7 +36,8 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     <div className="flex h-screen w-full items-center justify-center bg-page px-6">
       <div className="w-full max-w-sm">
         <div className="flex items-center justify-center gap-2 mb-1.5">
-          <Bot className="h-7 w-7 text-brand-purple" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.svg" alt="PM Agent logo" className="h-9 w-9" />
           <span className="text-2xl font-bold text-text-1">PM Agent</span>
         </div>
         <p className="text-center text-sm text-text-2 mb-8">AI Program Manager — sign in to continue</p>

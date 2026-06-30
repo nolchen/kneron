@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, Map, ListOrdered,
-  MessageSquare, Bot, CalendarDays, ClipboardList,
+  MessageSquare, CalendarDays, ClipboardList,
   Sun, Moon, BookOpen, Mail, ShieldCheck, Inbox,
 } from "lucide-react";
 import { useTheme } from "@/lib/useTheme";
@@ -37,7 +37,8 @@ export default function Sidebar() {
   return (
     <aside className="flex h-screen w-60 shrink-0 flex-col bg-sidebar text-white">
       <div className="flex items-center gap-2 px-5 py-5 border-b border-white/10">
-        <Bot className="h-6 w-6 text-brand-purple" />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo.svg" alt="PM Agent logo" className="h-7 w-7" />
         <span className="font-bold text-lg tracking-tight">PM Agent</span>
       </div>
 

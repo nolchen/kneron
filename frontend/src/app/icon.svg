@@ -1,0 +1,12 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="PM Agent">
+  <rect width="512" height="512" rx="120" fill="#5B50E8"/>
+  <g stroke="#DADDF7" stroke-width="18" stroke-linecap="round">
+    <line x1="256" y1="248" x2="256" y2="128"/>
+    <line x1="256" y1="248" x2="150" y2="360"/>
+    <line x1="256" y1="248" x2="362" y2="360"/>
+  </g>
+  <circle cx="256" cy="128" r="32" fill="#AEB6F2"/>
+  <circle cx="150" cy="360" r="37" fill="#FFFFFF"/>
+  <circle cx="362" cy="360" r="37" fill="#FFFFFF"/>
+  <circle cx="256" cy="248" r="56" fill="#FFFFFF"/>
+</svg>
