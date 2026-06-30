@@ -9,7 +9,8 @@
   --text-1:     #3C3744;
   --text-2:     rgba(60,55,68,0.5);
   --text-3:     rgba(60,55,68,0.3);
-  --sidebar-bg: #3C3744;
+  --sidebar-bg: #2A2640;        /* indigo-tinted dark, matches the logo */
+  --brand-purple: #5B50E8;      /* the logo's indigo */
 }
 
 /* ── Dark mode ── */
@@ -21,12 +22,13 @@
   --text-1:     #E1E5EE;
   --text-2:     rgba(225,229,238,0.5);
   --text-3:     rgba(225,229,238,0.3);
-  --sidebar-bg: #1A1820;
+  --sidebar-bg: #15131F;
+  --brand-purple: #8B82F0;      /* lighter indigo so it stays vivid on dark */
 }
 
 @theme inline {
   --color-brand-dark:   #3C3744;
-  --color-brand-purple: #8380B6;
+  --color-brand-purple: var(--brand-purple);
   --color-brand-light:  #E1E5EE;
   --color-brand-green:  #57A773;
 
