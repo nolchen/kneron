@@ -1,0 +1,25 @@
+name: Keep Render backend warm
+
+# Render's free tier spins the backend down after ~15 min of inactivity, and the
+# ~50s cold start then exceeds Vercel's proxy timeout — which surfaces as
+# "Failed to fetch" / "Load failed" on the AI chat and report features.
+# This pings the health endpoint on a schedule so the instance never sleeps.
+#
+# Note: GitHub's scheduled runs can be delayed several minutes under load, so for
+# rock-solid uptime also point a free monitor (e.g. UptimeRobot, 5-min interval)
+# at the same URL — or upgrade Render to an always-on instance.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # every 10 minutes
+  workflow_dispatch: {}       # allow manual runs
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend health
+        run: |
+          curl -fsS -m 60 https://pm-agent-api-84i4.onrender.com/api/health \
+            && echo "backend awake" \
+            || echo "ping failed (will retry next run)"
