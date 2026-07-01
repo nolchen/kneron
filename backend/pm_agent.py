@@ -80,8 +80,16 @@ class ProgramManagerAgent:
                     }
                     for p in github_context.get("projects", [])
                 ],
-                "top_issues": github_context.get("issues", [])[:10],
-                "open_prs": github_context.get("pull_requests", [])[:10],
+                # Slim to key fields — full issue/PR objects bloat the prompt
+                # and can overflow the model's context.
+                "top_issues": [
+                    {"title": i.get("title"), "assignees": i.get("assignees"), "labels": i.get("labels")}
+                    for i in github_context.get("issues", [])[:8]
+                ],
+                "open_prs": [
+                    {"title": p.get("title"), "author": p.get("author")}
+                    for p in github_context.get("pull_requests", [])[:8]
+                ],
                 "current_assignments": [
                     {
                         "title":     a.get("title"),
@@ -109,7 +117,8 @@ class ProgramManagerAgent:
         # Inject relevant past notes/reports as context
         if notes_context:
             notes_text = "\n\n".join(
-                f"[{n['type'].upper()} — {n['title']} — {n['created_at'][:10]}]\n{n['content']}"
+                # Cap each note so a pile of long reports can't overflow the prompt.
+                f"[{n['type'].upper()} — {n['title']} — {n['created_at'][:10]}]\n{n['content'][:700]}"
                 for n in notes_context
             )
             messages.append({
