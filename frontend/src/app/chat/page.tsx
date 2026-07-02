@@ -42,7 +42,10 @@ export default function ChatPage() {
         credentials: "include",   // send the session cookie (required once auth is enforced)
         body: JSON.stringify({ message: text, history: historyRef.current, include_github: true }),
       });
-      if (!res.ok) throw new Error(`Chat failed (${res.status})`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({} as { detail?: string }));
+        throw new Error(err.detail || `Chat failed (${res.status})`);
+      }
       const { response: full } = await res.json();
 
       setMessages((prev) => [...prev.slice(0, -1), { role: "assistant", content: full }]);

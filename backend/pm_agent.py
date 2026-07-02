@@ -98,7 +98,7 @@ class ProgramManagerAgent:
                         "status":    a.get("status"),
                         "priority":  a.get("priority"),
                     }
-                    for a in github_context.get("assignments", [])
+                    for a in github_context.get("assignments", [])[:15]
                 ],
             }
             messages.append({
@@ -106,7 +106,9 @@ class ProgramManagerAgent:
                 "content": (
                     "Here is the current team data — team workload, projects, issues, PRs, "
                     "and `current_assignments` (the live task board + calendar with due dates):\n"
-                    f"```json\n{json.dumps(summary, indent=2, default=str)}\n```"
+                    # Compact JSON (no indent): pretty-printing roughly doubles the
+                    # token count, which can blow past free-tier per-request limits.
+                    f"```json\n{json.dumps(summary, default=str)}\n```"
                 ),
             })
             messages.append({
@@ -118,7 +120,7 @@ class ProgramManagerAgent:
         if notes_context:
             notes_text = "\n\n".join(
                 # Cap each note so a pile of long reports can't overflow the prompt.
-                f"[{n['type'].upper()} — {n['title']} — {n['created_at'][:10]}]\n{n['content'][:700]}"
+                f"[{n['type'].upper()} — {n['title']} — {n['created_at'][:10]}]\n{n['content'][:500]}"
                 for n in notes_context
             )
             messages.append({

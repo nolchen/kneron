@@ -43,7 +43,7 @@ MOCK_TEAM = [
     # Free / available — recently rolled off other work, no open assignments.
     {"login": "joe_mama",         "role": "Frontend Engineer",   "open_issues": 0,  "open_prs": 0, "recent_commits": 0,  "repos_active": ["kneron/mobile-app"], "workload_score": 0.0},
     {"login": "elon_must",        "role": "Platform Engineer",   "open_issues": 0,  "open_prs": 0, "recent_commits": 0,  "repos_active": ["kneron/backend-api"], "workload_score": 0.0},
-    {"login": "obama",            "role": "ML Engineer",         "open_issues": 0,  "open_prs": 0, "recent_commits": 0,  "repos_active": ["kneron/ml-pipeline"], "workload_score": 0.0},
+    {"login": "obama_joe",        "role": "ML Engineer",         "open_issues": 0,  "open_prs": 0, "recent_commits": 0,  "repos_active": ["kneron/ml-pipeline"], "workload_score": 0.0},
 ]
 
 MOCK_DATA = {
@@ -699,7 +699,10 @@ def get_priorities():
 def get_summary(request: Request):
     _require_data()
     agent = _pm()
-    summary = agent.summarize_status(_scoped_data(request))
+    try:
+        summary = agent.summarize_status(_scoped_data(request))
+    except Exception as e:
+        raise HTTPException(502, f"AI call failed: {str(e)[:300]}")
     return {"summary": summary}
 
 
@@ -961,12 +964,17 @@ def _chat_context(req: ChatRequest, request: Request):
 def chat(req: ChatRequest, request: Request, _: dict = Depends(auth.require_user)):
     agent = _pm()
     github_context, history, notes_context = _chat_context(req, request)
-    response = agent.chat(
-        user_message=req.message,
-        github_context=github_context,
-        conversation_history=history,
-        notes_context=notes_context,
-    )
+    try:
+        response = agent.chat(
+            user_message=req.message,
+            github_context=github_context,
+            conversation_history=history,
+            notes_context=notes_context,
+        )
+    except Exception as e:
+        # Surface the provider's real error (rate limit, context too long, bad
+        # key, …) instead of a blank 500 — critical for diagnosing prod.
+        raise HTTPException(502, f"AI call failed: {str(e)[:300]}")
     return {"response": response}
 
 
@@ -1066,7 +1074,10 @@ def generate_and_save(request: Request, req: Optional[ReportRequest] = None, _: 
     req = req or ReportRequest()
     agent = _pm()
     role = (auth.current_user(request) or {}).get("role") or "L3"
-    content = agent.chat(_report_instruction(req, role), github_context=_scoped_data(request))
+    try:
+        content = agent.chat(_report_instruction(req, role), github_context=_scoped_data(request))
+    except Exception as e:
+        raise HTTPException(502, f"AI call failed: {str(e)[:300]}")
     title = _report_title(req)
     note = _notes.save(title=title, content=content, note_type="report")
     try:
