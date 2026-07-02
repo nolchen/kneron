@@ -4,7 +4,10 @@ import { useState, useRef, useEffect } from "react";
 import { ChatMessage } from "@/lib/types";
 import { Send, Bot, User, RefreshCw, Lightbulb } from "lucide-react";
 
-const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Same-origin by default so the browser hits the Next serverless proxy routes
+// (which forward to the backend). A hardcoded localhost fallback would make the
+// deployed browser fetch its OWN machine → "Failed to fetch".
+const BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 const SUGGESTIONS = [
   "Who is overloaded on the team right now?",

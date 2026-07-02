@@ -6,7 +6,9 @@ import { Note } from "@/lib/types";
 import { RefreshCw, FileText, Trash2, Plus, Bot, BookOpen, Download, FolderSync, ExternalLink } from "lucide-react";
 import { obsidianSearchUri } from "@/lib/utils";
 
-const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Same-origin by default (see chat/page.tsx) so the deployed browser uses the
+// Next serverless proxy instead of trying to fetch its own localhost.
+const BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 const TYPE_CFG = {
   report:  { label: "Report",  cls: "bg-brand-purple/15 text-brand-purple border-brand-purple/20" },
