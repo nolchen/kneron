@@ -24,6 +24,7 @@ export default function GraphPanel() {
   const [loading, setLoading] = useState(true);
   const pos = useRef<Record<string, P>>({});
   const tick = useRef(0);
+  const zoomRef = useRef(1);   // smoothed auto-fit scale (keeps the cloud in-frame)
   const [, render] = useState(0);
 
   useEffect(() => {
@@ -110,6 +111,28 @@ export default function GraphPanel() {
   const proj: Record<string, { sx: number; sy: number; s: number }> = {};
   if (ready) for (const n of nodes) proj[n.id] = project(P0[n.id]);
 
+  // Auto-fit zoom: stay a little zoomed out even when small, and shrink to keep
+  // the whole cloud inside the frame as more nodes (people, tasks, emails…)
+  // accumulate — so it can never grow "too big" and spill past the edges.
+  if (ready) {
+    let maxExt = 1;
+    for (const n of nodes) {
+      const p = proj[n.id];
+      maxExt = Math.max(maxExt, Math.hypot(p.sx - W / 2, p.sy - H / 2));
+    }
+    const BASE_ZOOM = 0.8;    // never fill the frame edge-to-edge
+    const TARGET_EXT = 130;   // px from center the farthest node may reach (leaves padding + label room)
+    const target = Math.min(BASE_ZOOM, TARGET_EXT / maxExt);
+    zoomRef.current += (target - zoomRef.current) * 0.08;   // ease toward target — no jitter
+    const z = zoomRef.current;
+    for (const n of nodes) {
+      const p = proj[n.id];
+      p.sx = W / 2 + (p.sx - W / 2) * z;
+      p.sy = H / 2 + (p.sy - H / 2) * z;
+    }
+  }
+  const zoom = ready ? zoomRef.current : 1;
+
   // Draw far nodes first so nearer ones sit on top.
   const order = ready ? [...nodes].sort((a, b) => proj[a.id].s - proj[b.id].s) : [];
 
@@ -145,13 +168,13 @@ export default function GraphPanel() {
             const depth = (a.s + b.s) / 2;
             return (
               <line key={i} x1={a.sx} y1={a.sy} x2={b.sx} y2={b.sy}
-                stroke="var(--ui-border)" strokeWidth={depth} strokeOpacity={0.15 + depth * 0.25} />
+                stroke="var(--ui-border)" strokeWidth={depth * zoom} strokeOpacity={0.15 + depth * 0.25} />
             );
           })}
           {ready && order.map((n) => {
             const a = proj[n.id];
             if (!a) return null;
-            const r = (RADIUS[n.type] ?? 5) * a.s;
+            const r = (RADIUS[n.type] ?? 5) * a.s * zoom;
             const showLabel = (n.type === "person" || n.type === "project") && a.s > 0.92;
             const label = n.type === "person" ? formatName(n.label) : n.label;
             return (
