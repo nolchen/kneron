@@ -919,10 +919,12 @@ def confirm_my_events(body: ConfirmEvents, user: dict = Depends(auth.require_use
         web_link, outlook_error = None, None
         if token:
             try:
+                # Personal calendar block only — no attendees, so Outlook does
+                # NOT email a meeting invite to anyone. Co-workers are recorded
+                # as assignees on the in-app board above.
                 created = email_client.create_calendar_event(
                     token, subject=ev.title, start_iso=ev.start, end_iso=end,
                     body=f"Added by PM Agent from email: {ev.source_subject}",
-                    attendees=ev.attendees,
                 )
                 web_link = created.get("webLink")
             except Exception as e:
@@ -1332,13 +1334,13 @@ def create_calendar_events(body: CalendarCreateBody, _: dict = Depends(auth.requ
     created, errors = [], []
     for ev in body.events:
         try:
+            # Personal calendar block only — no attendees, so no invite emails.
             res = email_client.create_calendar_event(
                 access_token=access,
                 subject=ev.title,
                 start_iso=ev.start,
                 end_iso=ev.end,
                 body=ev.body or f"Created by PM Agent from email: {ev.source_subject}",
-                attendees=ev.attendees,
                 timezone=body.timezone,
             )
             created.append(res)

@@ -126,12 +126,15 @@ def create_calendar_event(
     start_iso: str,
     end_iso: str,
     body: str = "",
-    attendees: list[str] | None = None,
     timezone: str = "Asia/Taipei",
 ) -> dict:
-    """Create an event on the user's Microsoft (Outlook) calendar.
-    start_iso/end_iso are local datetimes like '2026-06-20T14:00:00' interpreted in `timezone`
-    (defaults to Taipei). Returns the created event's id + webLink."""
+    """Create an event on the user's own Microsoft (Outlook) calendar as a
+    personal time-block. Deliberately does NOT set attendees: adding attendees
+    makes Graph auto-email a meeting invitation to each of them from the user,
+    which is not what confirming an extracted event should do. Co-workers are
+    tracked as assignees on the in-app board instead (see the confirm handler).
+    start_iso/end_iso are local datetimes like '2026-06-20T14:00:00' interpreted
+    in `timezone` (defaults to Taipei). Returns the created event's id + webLink."""
     headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
     payload: dict = {
         "subject": subject,
@@ -139,10 +142,6 @@ def create_calendar_event(
         "start":   {"dateTime": start_iso, "timeZone": timezone},
         "end":     {"dateTime": end_iso,   "timeZone": timezone},
     }
-    if attendees:
-        payload["attendees"] = [
-            {"emailAddress": {"address": a}, "type": "required"} for a in attendees
-        ]
     r = httpx.post(f"{GRAPH}/me/events", headers=headers, json=payload, timeout=30)
     r.raise_for_status()
     e = r.json()
