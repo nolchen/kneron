@@ -57,7 +57,7 @@ npm install
 
 ### Run
 
-From the `Kneron/` root:
+From the `PM_Agent/` folder:
 
 ```bash
 ./start.sh
@@ -66,12 +66,18 @@ From the `Kneron/` root:
 Or manually, in two terminals:
 
 ```bash
-cd backend && source .venv/bin/activate && uvicorn main:app --reload --port 8000
+cd backend && source .venv/bin/activate && uvicorn main:app --reload --host 0.0.0.0 --port 8000
 cd frontend && npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000). The app auto-loads realistic demo
 data on first run, so it works immediately — no GitHub token or setup required.
+
+**Sharing with a team:** run it on one machine and send teammates the
+`http://<your-ip>:3000` URL that `start.sh` prints. Everyone hits the same backend
+and database on that machine, so all users see the same shared, consistent data —
+no per-user copies. See [GETTING_STARTED.md](./GETTING_STARTED.md) §6b. Leave
+`NEXT_PUBLIC_API_URL` unset in `frontend/.env.local` for this to work.
 
 ## Environment variables
 
@@ -110,8 +116,10 @@ See [DEPLOY.md](./DEPLOY.md) for a free step-by-step (Vercel + Render + Groq).
 
 ## Notes
 
-- No authentication yet — anyone with the URL can view/edit. Fine for a trusted team; add
-  auth before opening it wider.
+- Runs in open mode by default — anyone with the URL can view/edit, which is what makes
+  the shared-on-your-network setup frictionless for a trusted team. Microsoft SSO with
+  L1/L2/L3 roles is built in; set `AUTH_ENFORCED=true` (plus the Microsoft env vars) to
+  require login and enforce role permissions before opening it wider. See `DEPLOY.md`.
 - The app ships with mock data so it runs without any external services. Connect a real
   GitHub org by setting `GITHUB_TOKEN` and syncing repos from the dashboard.
 

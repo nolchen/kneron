@@ -95,7 +95,38 @@ This starts the backend on `:8000` and the frontend on `:3000`. Then open:
 
 > **http://localhost:3000**
 
-*(To run them separately: in one terminal `source backend/.venv/bin/activate && cd backend && uvicorn main:app --reload`, and in another `cd frontend && npm run dev`.)*
+`start.sh` also prints a **"Share with your team"** URL (see next section).
+
+*(To run them separately: in one terminal `source backend/.venv/bin/activate && cd backend && uvicorn main:app --reload --host 0.0.0.0`, and in another `cd frontend && npm run dev`.)*
+
+---
+
+## 6b. Let your team use it — everyone sees the same data
+
+You only run the app on **one** machine. Everyone else just opens it in their
+browser — **nobody else has to install or clone anything.**
+
+Because all data lives in a **single database on the machine running `start.sh`**,
+every person who opens the app reads and writes that same database. Add a team
+member or move a task on one screen, and everyone else sees it too. There are no
+per-user copies to drift out of sync.
+
+**To share it on your network:**
+
+1. Run `bash start.sh`. It prints a line like:
+   ```
+   Share with your team → http://192.168.1.42:3000   (same Wi-Fi/network)
+   ```
+2. Send that `http://<your-ip>:3000` URL to teammates on the **same Wi-Fi /
+   network**. They open it in any browser — done.
+
+If a teammate's page loads but shows no data or "failed to fetch," it's almost
+always because `NEXT_PUBLIC_API_URL` is set in `frontend/.env.local`. **Leave it
+unset** (the shipped default) so every browser talks to this one host through the
+built-in proxy. See `frontend/.env.local.example` for details.
+
+> Sharing beyond your local network (e.g. over the internet) is a deployment
+> concern — see `DEPLOY.md`.
 
 ---
 
@@ -221,6 +252,7 @@ button to call it live. (A machine-readable spec is at
 | Backend won't start / import errors | Re-run `bash backend/setup.sh`, ensure `.venv` is active |
 | Chat/reports error | Make sure Ollama is running (`ollama serve`) or a valid `GROQ_API_KEY` is set |
 | Dashboard shows "no data" | Click **Load Demo Data**, or connect email/GitHub |
+| Teammate on the network sees "failed to fetch" / no data | Make sure `NEXT_PUBLIC_API_URL` is **unset** in `frontend/.env.local`, and that they used the `http://<your-ip>:3000` URL (not `localhost`) on the same network |
 | Port already in use | Something's on `:8000`/`:3000` — stop it, or change the port |
 
 ---
