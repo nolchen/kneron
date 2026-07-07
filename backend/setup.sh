@@ -10,18 +10,13 @@ echo "==> Setting up PM Dashboard backend"
 python3 -m venv "$SCRIPT_DIR/.venv"
 source "$SCRIPT_DIR/.venv/bin/activate"
 
-# Install our backend deps
+# Install backend deps (everything the app needs is pinned in requirements.txt:
+# FastAPI, uvicorn, the openai SDK for any OpenAI-compatible LLM, ChromaDB, etc.)
+pip install -q --upgrade pip
 pip install -q -r "$SCRIPT_DIR/requirements.txt"
 
-# Install Hermes Agent as a package (gives us run_agent, agent/, etc.)
-echo "==> Installing Hermes Agent..."
-pip install -q -e "$ROOT/hermes-agent"
-
-# Install the anthropic SDK (Hermes lazy-loads it)
-pip install -q "anthropic>=0.40.0"
-
 echo ""
-echo "==> Done! Copy .env.example to .env and fill in your API keys:"
+echo "==> Done! Copy .env.example to .env (defaults run a free local Ollama setup):"
 echo "    cp backend/.env.example backend/.env"
 echo ""
 echo "==> Then start the backend:"
