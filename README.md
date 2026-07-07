@@ -18,6 +18,8 @@ questions about it all in plain English. Runs fully local and free, or deploys t
   written to an Obsidian vault as Markdown
 - **AI PM Chat** — talk to the agent directly. It has your team data loaded and searches
   past reports/notes (RAG) to answer questions
+- **Knowledge Graph** — a live 3D map of how people, projects, tasks, reports, and emails
+  connect; auto-fits so it stays readable as the team and its data grow
 - **Dark mode**, dismissible alerts, and a custom brand palette throughout
 
 ## Stack
