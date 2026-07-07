@@ -55,8 +55,13 @@ class NotesStore:
         self._client     = chromadb.PersistentClient(path=DB_PATH)
         self._collection = self._client.get_or_create_collection("pm_notes")
 
-    def save(self, title: str, content: str, note_type: str = "report") -> dict:
-        note_id   = str(uuid.uuid4())
+    def save(self, title: str, content: str, note_type: str = "report",
+             owner: str = "", note_id: str | None = None) -> dict:
+        """Persist a note. `owner` tags who it belongs to (e.g. the inbox an
+        email came from) so callers can scope visibility. Pass a stable
+        `note_id` to make re-saving the same item idempotent (upsert) — used for
+        emails so re-scanning an inbox doesn't create duplicate notes/graph nodes."""
+        note_id   = note_id or str(uuid.uuid4())
         try:
             embedding = _embed(content)
         except Exception as e:
@@ -64,14 +69,15 @@ class NotesStore:
             embedding = _fallback_embedding(content)
         created   = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         with _lock:
-            self._collection.add(
+            self._collection.upsert(
                 ids=[note_id],
                 embeddings=[embedding],
                 documents=[content],
-                metadatas=[{"title": title, "type": note_type, "created_at": created}],
+                metadatas=[{"title": title, "type": note_type,
+                            "owner": owner, "created_at": created}],
             )
         return {"id": note_id, "title": title, "type": note_type,
-                "content": content, "created_at": created}
+                "owner": owner, "content": content, "created_at": created}
 
     def search(self, query: str, n: int = 3) -> list[dict]:
         with _lock:
@@ -92,6 +98,7 @@ class NotesStore:
                 "content":    results["documents"][0][i],
                 "title":      results["metadatas"][0][i]["title"],
                 "type":       results["metadatas"][0][i]["type"],
+                "owner":      results["metadatas"][0][i].get("owner", ""),
                 "created_at": results["metadatas"][0][i]["created_at"],
             }
             for i in range(len(results["documents"][0]))

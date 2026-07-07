@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import hashlib
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
@@ -236,6 +237,16 @@ app.add_middleware(
 def _login_from_email(email: str) -> str:
     """Stable team-member login derived from an email local-part."""
     return email.split("@")[0].replace(".", "_").lower()
+
+
+def _email_note_visible(owner: str, visible: Optional[set]) -> bool:
+    """Whether an email note owned by `owner` may be shown to a requester whose
+    visible-people set is `visible` (None = admin / see-everyone). Emails are
+    scoped to the same people the rest of the dashboard is scoped to, so no one
+    sees another person's inbox unless they can already see that person."""
+    if visible is None:
+        return True
+    return _login_from_email(owner or "") in visible
 
 
 def _ensure_member_from_inbox(email: str, name: str = "") -> None:
@@ -722,8 +733,10 @@ def get_graph(request: Request):
         all_notes = _notes.list_all()
     except Exception:
         all_notes = []
-    emails  = [n for n in all_notes if n.get("note_type") == "email"][:12]
-    reports = [n for n in all_notes if n.get("note_type") != "email"][:8]
+    emails  = [n for n in all_notes
+               if n.get("type") == "email"
+               and _email_note_visible(n.get("owner", ""), vis)][:12]
+    reports = [n for n in all_notes if n.get("type") != "email"][:8]
     notes   = emails + reports
 
     nodes, edges = [], []
@@ -762,7 +775,7 @@ def get_graph(request: Request):
             edge("p:" + x, "t:" + a["id"])
 
     by_addr = {(m.get("email") or "").lower(): m for m in members if m.get("email")}
-    nid_of = lambda n2: ("e:" if n2.get("note_type") == "email" else "n:") + n2["id"]
+    nid_of = lambda n2: ("e:" if n2.get("type") == "email" else "n:") + n2["id"]
 
     def link_people(nid, blob):
         for addr, m in by_addr.items():              # exact email-address match
@@ -827,10 +840,34 @@ def my_inbox_status(user: dict = Depends(auth.require_user)):
     }
 
 
+def _persist_emails(messages: list, owner: str) -> None:
+    """Save scanned emails into the notes store (owner-tagged) so they appear in
+    the knowledge graph and RAG for people who can see `owner`. Idempotent: a
+    stable id per (owner, subject, received) means re-scanning updates in place
+    instead of creating duplicate email nodes."""
+    for m in messages:
+        subject = m.get("subject") or "(no subject)"
+        eid = "email:" + hashlib.sha256(
+            f"{owner}|{subject}|{m.get('received', '')}".encode()
+        ).hexdigest()[:32]
+        try:
+            _notes.save(
+                title=f"Email: {subject}",
+                content=(f"From: {m.get('from_name', '')} <{m.get('from', '')}>\n"
+                         f"Received: {m.get('received', '')}\n"
+                         f"To inbox: {owner}\n\n{m.get('preview', '')}"),
+                note_type="email", owner=owner, note_id=eid,
+            )
+        except Exception as e:
+            print(f"[scan] Could not persist email {subject!r}: {e}")
+
+
 @app.post("/api/me/scan")
 def scan_my_inbox(user: dict = Depends(auth.require_user)):
     """Read the signed-in user's recent mail and PROPOSE calendar-worthy tasks/
-    events. Writes nothing — the user confirms before anything lands."""
+    events. Does NOT write to any calendar — the user confirms before anything
+    lands there. It does save the scanned emails (owner-tagged) into the notes
+    store so they show up in the requester's knowledge graph / RAG."""
     token = _user_access_token(user)
     try:
         messages = email_client.fetch_recent_messages(token, top=25)
@@ -861,6 +898,7 @@ def scan_my_inbox(user: dict = Depends(auth.require_user)):
         for p in raw
         if p.get("title") and p.get("start") and p.get("confidence", 1) >= 0.5
     ]
+    _persist_emails(messages, user["email"])   # feed the knowledge graph / RAG
     db.set_email_synced(user["email"], datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
     return {"proposals": proposals, "scanned": len(messages)}
 
@@ -941,16 +979,20 @@ def confirm_my_events(body: ConfirmEvents, user: dict = Depends(auth.require_use
 def _chat_context(req: ChatRequest, request: Request):
     github_context = _scoped_data(request) if req.include_github else None
     history = [{"role": m.role, "content": m.content} for m in req.history] if req.history else None
+    # Email notes are personal — only fold in ones the requester is allowed to see.
+    vis = visibility.scope_for(request)
+    def _allowed(n):
+        return n.get("type") != "email" or _email_note_visible(n.get("owner", ""), vis)
     # RAG: search past notes for anything relevant to the question...
     try:
-        notes_context = _notes.search(req.message, n=3)
+        notes_context = [n for n in _notes.search(req.message, n=5) if _allowed(n)][:3]
     except Exception:
         notes_context = []
     # ...then always fold in the most recent reports/notes, so the AI references
     # past Obsidian reports even when semantic search finds nothing (or embeddings
     # are unavailable). Dedupe by title, cap the total.
     try:
-        recent = _notes.list_all()[:3]
+        recent = [n for n in _notes.list_all() if _allowed(n)][:3]
     except Exception:
         recent = []
     seen = {n["title"] for n in notes_context}
@@ -1249,15 +1291,8 @@ def email_sync(_: dict = Depends(auth.require_admin)):
         try:
             access = email_client.refresh_access_token(acct["refresh_token"])
             messages = email_client.fetch_recent_messages(access, top=20)
-            for m in messages:
-                title   = f"Email: {m['subject']}"
-                content = (
-                    f"From: {m['from_name']} <{m['from']}>\n"
-                    f"Received: {m['received']}\n"
-                    f"To inbox: {acct['email']}\n\n{m['preview']}"
-                )
-                _notes.save(title=title, content=content, note_type="email")
-                total += 1
+            _persist_emails(messages, acct["email"])   # owner-tagged, idempotent
+            total += len(messages)
             db.set_email_synced(acct["email"], datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
         except Exception as e:
             errors.append(f"{acct['email']}: {str(e)[:80]}")

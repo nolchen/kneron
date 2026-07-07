@@ -259,3 +259,34 @@ def test_decide_role_no_auto_l3_when_enforced(monkeypatch):
     monkeypatch.setenv("FIRST_ADMIN_EMAIL", "boss@k.us")
     assert auth.decide_role("boss@k.us") == "L3"
     assert auth.decide_role("stranger@k.us") == "L1"
+
+
+# ---------------------------------------------------------------------------
+# Knowledge graph — emails
+# ---------------------------------------------------------------------------
+
+def test_email_shows_in_knowledge_graph():
+    """An email note must surface as an 'email' node in /api/graph and link to a
+    team member it mentions. Regression guard: the graph once read the wrong
+    metadata key ('note_type' vs 'type'), so email nodes never appeared."""
+    member = client.get("/api/team").json()["team_members"][0]
+    addr, login = member["email"], member["login"]
+
+    note = client.post("/api/notes", json={
+        "title": "Email: Graph regression check",
+        "content": f"From: Boss <boss@kneron.us>\n\nLooping in {addr} on this.",
+        "note_type": "email",
+    }).json()
+
+    try:
+        g = client.get("/api/graph").json()
+        email_nodes = [n for n in g["nodes"] if n["type"] == "email"]
+        assert any("Graph regression check" in n["label"] for n in email_nodes), \
+            "email note did not become an email node"
+        pnode = "p:" + login
+        linked = [e for e in g["edges"]
+                  if pnode in (e["source"], e["target"])
+                  and (e["source"].startswith("e:") or e["target"].startswith("e:"))]
+        assert linked, "email node was not linked to the mentioned team member"
+    finally:
+        client.delete(f"/api/notes/{note['id']}")
