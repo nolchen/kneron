@@ -175,18 +175,12 @@ export default function GraphPanel() {
             const a = proj[n.id];
             if (!a) return null;
             const r = (RADIUS[n.type] ?? 5) * a.s * zoom;
-            const showLabel = (n.type === "person" || n.type === "project") && a.s > 0.92;
             const label = n.type === "person" ? formatName(n.label) : n.label;
             return (
               <g key={n.id} opacity={Math.max(0.35, Math.min(1, a.s * 0.85))}>
                 <circle cx={a.sx} cy={a.sy} r={r} fill={COLOR[n.type] ?? "#888"} stroke="var(--surface)" strokeWidth={1.5}>
                   <title>{label}</title>
                 </circle>
-                {showLabel && (
-                  <text x={a.sx} y={a.sy + r + 9} textAnchor="middle" fontSize={9} fill="var(--text-2)">
-                    {label.length > 14 ? label.slice(0, 13) + "…" : label}
-                  </text>
-                )}
               </g>
             );
           })}
