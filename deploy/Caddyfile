@@ -1,0 +1,17 @@
+# Self-signed HTTPS in front of PM Agent so Microsoft sign-in (which refuses
+# plain http off localhost) works over the network. Caddy's internal CA issues
+# a cert for the IP — browsers show a one-time "not trusted" warning; click
+# through. For a clean, warning-free setup, replace the IP with an IT-provided
+# hostname + real cert (then this whole file becomes: `pm-agent.kneron.us { reverse_proxy localhost:3000 }`).
+#
+# Run:  caddy run --config deploy/Caddyfile
+# Then open:  https://10.200.211.108:8443
+
+{
+	auto_https disable_redirects
+}
+
+https://10.200.211.108:8443 {
+	tls internal
+	reverse_proxy localhost:3000
+}

@@ -125,7 +125,10 @@ def cookie_kwargs() -> dict:
     return {
         "httponly": True,
         "secure": secure,
-        "samesite": "none" if secure else "lax",
+        # Same-origin deploys (everything behind one host, e.g. Caddy on :8443)
+        # want Lax — it survives the OAuth top-level redirect and works in Safari.
+        # Only a cross-domain deploy (Vercel↔Render) needs COOKIE_SAMESITE=none.
+        "samesite": os.environ.get("COOKIE_SAMESITE", "lax"),
         "max_age": _TOKEN_TTL,
         "path": "/",
     }
@@ -156,7 +159,9 @@ def state_cookie_kwargs() -> dict:
     return {
         "httponly": True,
         "secure": secure,
-        "samesite": "none" if secure else "lax",
+        # Lax survives Microsoft's top-level redirect back to /callback on a
+        # same-origin deploy and avoids Safari dropping SameSite=None cookies.
+        "samesite": os.environ.get("COOKIE_SAMESITE", "lax"),
         "max_age": 600,
         "path": "/",
     }

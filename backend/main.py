@@ -722,6 +722,10 @@ def get_graph(request: Request):
     """Knowledge graph for the dashboard: people, projects, tasks and reports as
     nodes; relationships (assigned-to, works-on, mentioned-in, [[links]]) as edges.
     Role-scoped — you only see your slice when auth is enforced."""
+    # No graph for anonymous callers once auth is enforced — otherwise report
+    # titles would leak to anyone who hits the URL without signing in.
+    if auth.auth_enforced() and auth.current_user(request) is None:
+        return {"nodes": [], "edges": []}
     vis = visibility.scope_for(request)              # None = see everyone
     members = _team_with_workload()
     if vis is not None:
