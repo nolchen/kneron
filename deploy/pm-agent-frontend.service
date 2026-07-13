@@ -1,0 +1,24 @@
+[Unit]
+# PM Agent — Next.js frontend (production server, bound to the machine's IP).
+# Build ONCE before enabling (see deploy/README.md): cd frontend && npm run build
+# Then:
+#   sudo cp deploy/pm-agent-frontend.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now pm-agent-frontend
+Description=PM Agent frontend (Next.js)
+After=network-online.target pm-agent-backend.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pmagent
+WorkingDirectory=/opt/pm-agent/frontend
+Environment=NODE_ENV=production
+# Frontend proxies /api/* to the backend on THIS same machine.
+Environment=BACKEND_ORIGIN=http://localhost:8000
+# -H 0.0.0.0 is what makes it reachable by the machine's IP, not just localhost.
+ExecStart=/usr/bin/npm run start -- -H 0.0.0.0 -p 3000
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
