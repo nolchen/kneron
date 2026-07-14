@@ -3,7 +3,7 @@
 # Smoke-test the PM Agent API end to end.
 #
 # Usage:
-#   BASE="https://10.200.211.108:8443" PM_SESSION="<pm_session cookie>" ./scripts/test_api.sh
+#   BASE="https://10.200.211.156:8443" PM_SESSION="<pm_session cookie>" ./scripts/test_api.sh
 #
 # Get PM_SESSION: sign in at the app, then DevTools → Application → Cookies →
 # copy the value of `pm_session`. Without it, only the public checks run.
@@ -11,7 +11,7 @@
 # -k is used throughout because the deploy uses a self-signed cert. Drop it once
 # a real (IT-issued) cert is in place.
 
-BASE="${BASE:-https://10.200.211.108:8443}"
+BASE="${BASE:-https://10.200.211.156:8443}"
 SESS="${PM_SESSION:-}"
 CURL=(curl -sk -m 60)
 [ -n "$SESS" ] && CURL+=(-b "pm_session=$SESS")

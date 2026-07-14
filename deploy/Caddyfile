@@ -5,13 +5,13 @@
 # hostname + real cert (then this whole file becomes: `pm-agent.kneron.us { reverse_proxy localhost:3000 }`).
 #
 # Run:  caddy run --config deploy/Caddyfile
-# Then open:  https://10.200.211.108:8443
+# Then open:  https://10.200.211.156:8443
 
 {
 	auto_https disable_redirects
 }
 
-https://10.200.211.108:8443 {
+https://10.200.211.156:8443 {
 	tls internal
 	reverse_proxy localhost:3000
 }
